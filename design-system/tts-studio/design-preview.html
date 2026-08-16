@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TTS Studio — Design Preview</title>
+<style>
+  /* Tokens mirror frontend/src/index.css */
+  :root{--navy-950:#0b0c1c;--navy-900:#0f1024;--navy-850:#14162c;--navy-800:#191b34;--navy-700:#22254a;--navy-600:#2c3060;--slate-50:#f6f7fb;--slate-100:#eceef5;--slate-200:#dde0ea;--slate-300:#c3c8d6;--slate-400:#9aa3b8;--slate-450:#7b8499;--slate-500:#6b748a;--slate-550:#5b6478;--slate-900:#161a2b;--indigo-300:#a5b4fc;--indigo-400:#818cf8;--indigo-500:#6366f1;--indigo-600:#4f46e5;--orange-400:#fb923c;--orange-500:#f97316;--orange-600:#ea580c;--white:#fff;
+    --radius-sm:6px;--radius-md:10px;--radius-lg:14px;--dur:180ms;--ease:cubic-bezier(.16,1,.3,1)}
+  :root,[data-theme=dark]{color-scheme:dark;--bg:var(--navy-900);--surface:var(--navy-850);--surface-2:var(--navy-800);--surface-3:var(--navy-700);--line:var(--navy-700);--line-strong:var(--navy-600);--fg:#f1f3f9;--fg-muted:var(--slate-400);--fg-subtle:var(--slate-450);--primary:var(--orange-500);--primary-hover:var(--orange-400);--primary-fg:#1a0f05;--primary-soft:rgba(249,115,22,.14);--secondary:var(--indigo-500);--secondary-soft:rgba(99,102,241,.16);--secondary-fg:var(--indigo-300);--ring:var(--indigo-400);--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--info:#22d3ee;--success-soft:rgba(34,197,94,.14);--warning-soft:rgba(245,158,11,.14);--danger-soft:rgba(239,68,68,.14);--info-soft:rgba(34,211,238,.14);--shadow-sm:0 1px 2px rgba(0,0,0,.35);--shadow-glow:0 0 0 1px rgba(249,115,22,.35),0 8px 24px rgba(249,115,22,.25)}
+  [data-theme=light]{color-scheme:light;--bg:var(--slate-50);--surface:var(--white);--surface-2:var(--slate-100);--surface-3:var(--slate-200);--line:var(--slate-200);--line-strong:var(--slate-300);--fg:var(--slate-900);--fg-muted:var(--slate-550);--fg-subtle:var(--slate-500);--primary:#c2410c;--primary-hover:var(--orange-600);--primary-fg:#fff;--primary-soft:rgba(194,65,12,.12);--secondary:var(--indigo-600);--secondary-soft:rgba(79,70,229,.12);--secondary-fg:var(--indigo-600);--ring:var(--indigo-500);--success:#15803d;--warning:#b45309;--danger:#dc2626;--info:#0e7490;--success-soft:rgba(21,128,61,.12);--warning-soft:rgba(180,83,9,.12);--danger-soft:rgba(220,38,38,.12);--info-soft:rgba(14,116,144,.12);--shadow-sm:0 1px 2px rgba(22,26,43,.08);--shadow-glow:0 0 0 1px rgba(234,88,12,.3),0 8px 24px rgba(234,88,12,.18)}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Inter Variable",Inter,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;letter-spacing:-.01em} header .sp{flex:1}
+  main{max-width:1100px;margin:0 auto;padding:24px;display:grid;gap:20px}
+  h2{font-size:15px;margin:0 0 12px;letter-spacing:-.01em} p{margin:0 0 8px;color:var(--fg-muted);font-size:13px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:20px;box-shadow:var(--shadow-sm)}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .sw{width:112px;border-radius:var(--radius-md);border:1px solid var(--line);overflow:hidden;font-size:11px}
+  .sw i{display:block;height:44px} .sw b{display:block;padding:6px 8px;font-weight:600} .sw span{display:block;padding:0 8px 6px;color:var(--fg-muted);font-family:ui-monospace,Consolas,monospace}
+  .btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:var(--radius-md);border:0;font:inherit;font-weight:600;cursor:pointer;transition:background-color var(--dur),box-shadow var(--dur),transform var(--dur)}
+  .btn:active{transform:scale(.98)} .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--primary);color:var(--primary-fg);box-shadow:var(--shadow-sm)} .btn-primary:hover:not(:disabled){background:var(--primary-hover);box-shadow:var(--shadow-glow)}
+  .btn-secondary{background:var(--secondary-soft);color:var(--secondary-fg)} .btn-ghost{background:var(--surface-2);color:var(--fg)} .btn-ghost:hover{background:var(--surface-3)}
+  .btn-outline{background:transparent;border:1px solid var(--line-strong);color:var(--fg)} .btn-danger{background:var(--danger-soft);color:var(--danger)}
+  :where(button,input,select,[tabindex]):focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:var(--radius-sm)}
+  .input{height:38px;width:100%;max-width:320px;border-radius:var(--radius-md);border:1px solid var(--line);background:var(--surface-2);color:var(--fg);padding:0 12px;font:inherit;outline:0;transition:border-color var(--dur),box-shadow var(--dur)} .input:hover{border-color:var(--line-strong)} .input:focus{border-color:var(--ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--ring) 25%,transparent)}
+  .chip{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--fg-muted);font:inherit;font-size:12px;font-weight:500;cursor:pointer} .chip[aria-pressed=true]{border-color:var(--secondary);background:var(--secondary-soft);color:var(--fg)}
+  .tag{display:inline-flex;padding:2px 6px;border-radius:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .t-muted{background:var(--surface-3);color:var(--fg-muted)} .t-primary{background:var(--primary-soft);color:var(--primary)} .t-sec{background:var(--secondary-soft);color:var(--secondary-fg)} .t-ok{background:var(--success-soft);color:var(--success)} .t-warn{background:var(--warning-soft);color:var(--warning)} .t-err{background:var(--danger-soft);color:var(--danger)} .t-info{background:var(--info-soft);color:var(--info)}
+  .seg{display:inline-flex;gap:4px;padding:4px;border-radius:var(--radius-md);background:var(--surface-2)} .seg button{border:0;background:transparent;color:var(--fg-muted);font:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:var(--radius-sm);cursor:pointer;min-height:30px} .seg button[aria-pressed=true]{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-sm)}
+  .prog{height:6px;border-radius:999px;background:var(--surface-3);overflow:hidden;max-width:320px} .prog i{display:block;height:100%;width:62%;background:var(--primary)}
+  .alert{display:flex;gap:8px;padding:8px 12px;border-radius:var(--radius-md);font-size:12px;max-width:520px} .a-info{background:var(--info-soft);color:var(--info)} .a-err{background:var(--danger-soft);color:var(--danger)}
+  .type div{margin:6px 0} .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--fg-muted)}
+  table{border-collapse:collapse;font-size:12px} td,th{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left} th{color:var(--fg-muted);font-weight:600} .pass{color:var(--success);font-weight:700} .fail{color:var(--danger);font-weight:700}
+  .empty{border:1px dashed var(--line-strong);border-radius:var(--radius-lg);padding:28px;text-align:center;color:var(--fg-muted);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div style="width:36px;height:36px;border-radius:10px;background:var(--primary);color:var(--primary-fg);display:grid;place-items:center;box-shadow:var(--shadow-glow);font-weight:800">S</div>
+  <h1>TTS Studio · Design Preview</h1>
+  <div class="sp"></div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button aria-pressed="true" data-t="dark">Tối</button><button aria-pressed="false" data-t="light">Sáng</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>Màu ngữ nghĩa</h2>
+    <p>Semantic tokens — component chỉ dùng các tên này, không dùng hex.</p>
+    <div class="row" id="swatches"></div>
+  </section>
+
+  <section class="card">
+    <h2>Kiểm tra contrast (WCAG AA ≥ 4.5:1 cho chữ)</h2>
+    <table id="contrast"><thead><tr><th>Cặp</th><th>Tỉ lệ</th><th>Kết quả</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card type">
+    <h2>Chữ — Inter Variable</h2>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.01em">Tạo giọng nói — H1 22/700</div>
+    <div style="font-size:15px;font-weight:700">Tiêu đề card — 15/700</div>
+    <div style="font-size:14px">Body 14/400 — Dán văn bản hoặc tải ebook / SRT → chọn giọng → xuất WAV/MP3.</div>
+    <div style="font-size:13px;color:var(--fg-muted)">Phụ 13/400 muted — 3 chương · 1.204 ký tự · ~2 phút audio</div>
+    <div style="font-size:11px;color:var(--fg-subtle)">Meta 11 subtle — 16/08/2026 14:32 · #a1b2c3</div>
+    <div class="mono">mono 12 — vi-VN-HoaiMyNeural · 00:00:05,031</div>
+  </section>
+
+  <section class="card">
+    <h2>Nút</h2>
+    <div class="row">
+      <button class="btn btn-primary">▶ Tạo giọng nói</button>
+      <button class="btn btn-secondary">Gửi sang TTS</button>
+      <button class="btn btn-ghost">Lưu SRT</button>
+      <button class="btn btn-outline">Chọn file</button>
+      <button class="btn btn-danger">Hủy</button>
+      <button class="btn btn-primary" disabled>Disabled</button>
+    </div>
+    <p style="margin-top:10px">Hover: sáng hơn + glow (primary). Active: scale .98. Focus: ring indigo 2px. Loading: spinner thay icon.</p>
+  </section>
+
+  <section class="card">
+    <h2>Field · Segmented · Chip · Tag</h2>
+    <div class="row" style="margin-bottom:10px"><input class="input" placeholder="Tiêu đề (tùy chọn)" /><input class="input" value="Đã nhập" /><input class="input" disabled value="Disabled" /></div>
+    <div class="row" style="margin-bottom:10px">
+      <div class="seg"><button aria-pressed="true">MP3</button><button>WAV</button></div>
+      <button class="chip" aria-pressed="true">Tiếng Việt</button><button class="chip">English</button><button class="chip">Trung</button>
+    </div>
+    <div class="row"><span class="tag t-muted">txt</span><span class="tag t-primary">Hot</span><span class="tag t-sec">Đang chạy</span><span class="tag t-ok">Xong</span><span class="tag t-warn">Chờ GPU</span><span class="tag t-err">Lỗi</span><span class="tag t-info">SRT · 42 dòng</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Phản hồi hệ thống</h2>
+    <div class="prog" aria-label="62%"><i></i></div>
+    <p style="margin:6px 0 12px">[Chương 1] 3/5 · 62%</p>
+    <div class="alert a-info" style="margin-bottom:8px">ℹ Pipeline: Edge TTS đúng ngôn ngữ → chuyển đổi sang giọng clone (cần GPU để nhanh).</div>
+    <div class="alert a-err" role="alert">✕ FFmpeg chưa được cài. Vào Cài đặt → Tải FFmpeg.</div>
+    <div class="empty" style="margin-top:12px"><b style="color:var(--fg)">Chưa có nội dung</b><br />Dán văn bản hoặc tải ebook ở trên. Chương sẽ tự động được nhận diện.</div>
+  </section>
+</main>
+<script>
+  const SEM=['bg','surface','surface-2','surface-3','line','fg','fg-muted','fg-subtle','primary','primary-fg','secondary','secondary-fg','ring','success','warning','danger','info'];
+  const cs=()=>getComputedStyle(document.documentElement);
+  const parse=c=>{c=c.trim();if(c.startsWith('#')){let h=c.slice(1);if(h.length===3)h=h.split('').map(x=>x+x).join('');return[0,2,4].map(i=>parseInt(h.slice(i,i+2),16))}const m=c.match(/[\d.]+/g);return m?m.slice(0,3).map(Number):[0,0,0]};
+  const lum=([r,g,b])=>{const f=x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)};return .2126*f(r)+.7152*f(g)+.0722*f(b)};
+  const cr=(a,b)=>{const la=lum(parse(a)),lb=lum(parse(b));return (Math.max(la,lb)+.05)/(Math.min(la,lb)+.05)};
+  function render(){
+    const v=n=>cs().getPropertyValue('--'+n);
+    document.getElementById('swatches').innerHTML=SEM.map(n=>`<div class="sw"><i style="background:${v(n)}"></i><b>${n}</b><span>${v(n).trim()}</span></div>`).join('');
+    const pairs=[['fg','surface'],['fg-muted','surface'],['fg-muted','surface-2'],['fg-subtle','surface'],['primary-fg','primary'],['secondary-fg','surface'],['success','surface'],['warning','surface'],['danger','surface'],['info','surface']];
+    document.querySelector('#contrast tbody').innerHTML=pairs.map(([a,b])=>{const r=cr(v(a),v(b));return `<tr><td>${a} / ${b}</td><td>${r.toFixed(2)}:1</td><td class="${r>=4.5?'pass':'fail'}">${r>=4.5?'AA ✓':'✗'}</td></tr>`}).join('');
+  }
+  document.querySelectorAll('.seg [data-t]').forEach(b=>b.addEventListener('click',()=>{document.documentElement.dataset.theme=b.dataset.t;document.querySelectorAll('.seg [data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));render()}));
+  render();
+</script>
+</body>
+</html>
