@@ -66,7 +66,10 @@ Copy-Item -Force (Join-Path $Root "launcher.py") $Dist
 Copy-Item -Force (Join-Path $Root "scripts\run.bat") (Join-Path $Dist "TTS Studio.bat")
 Copy-Item -Force (Join-Path $Root "scripts\run-silent.vbs") (Join-Path $Dist "TTS Studio (no console).vbs")
 Copy-Item -Force (Join-Path $Root "README.md") $Dist
+New-Item -ItemType Directory -Force (Join-Path $Dist "assets") | Out-Null
+Copy-Item -Force (Join-Path $Root "assets\app.ico") (Join-Path $Dist "assets\app.ico")
+Copy-Item -Force (Join-Path $Root "assets\app-256.png") (Join-Path $Dist "assets\app-256.png")
 
 $size = (Get-ChildItem $Dist -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ("==> Done: {0}  ({1:N0} MB)" -f $Dist, $size) -ForegroundColor Green
-Write-Host "Run: `"$Dist\TTS Studio.bat`"  |  Installer: iscc installer\TTSStudio.iss"
+Write-Host "Run: `"$Dist\TTS Studio.bat`"  |  Installer: powershell -File scripts\installer.ps1"
