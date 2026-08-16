@@ -1,0 +1,64 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "project": "TTS Studio",
+    "version": "1.0.0",
+    "updated": "2026-08-16",
+    "structure": "primitive -> semantic -> component",
+    "source": "frontend/src/index.css (single source of truth); this file mirrors it for docs/tooling"
+  },
+  "primitive": {
+    "color": {
+      "navy": { "950": "#0b0c1c", "900": "#0f1024", "850": "#14162c", "800": "#191b34", "700": "#22254a", "600": "#2c3060" },
+      "slate": { "50": "#f6f7fb", "100": "#eceef5", "200": "#dde0ea", "300": "#c3c8d6", "400": "#9aa3b8", "450": "#7b8499", "500": "#6b748a", "550": "#5b6478", "700": "#3b4257", "900": "#161a2b" },
+      "indigo": { "300": "#a5b4fc", "400": "#818cf8", "500": "#6366f1", "600": "#4f46e5" },
+      "orange": { "400": "#fb923c", "500": "#f97316", "600": "#ea580c", "700": "#c2410c", "800": "#9a3412" },
+      "green": { "500": "#22c55e", "700": "#15803d" },
+      "amber": { "500": "#f59e0b", "700": "#b45309" },
+      "red": { "500": "#ef4444", "600": "#dc2626" },
+      "cyan": { "400": "#22d3ee", "700": "#0e7490" },
+      "white": "#ffffff"
+    },
+    "font": {
+      "sans": "\"Inter Variable\", Inter, \"Segoe UI\", system-ui, sans-serif",
+      "mono": "ui-monospace, \"Cascadia Mono\", Consolas, monospace"
+    },
+    "space": { "xs": "4px", "sm": "8px", "md": "16px", "lg": "24px", "xl": "32px", "2xl": "48px" },
+    "radius": { "sm": "6px", "md": "10px", "lg": "14px", "pill": "999px" },
+    "duration": { "fast": "120ms", "base": "180ms", "slow": "260ms" },
+    "easing": { "out": "cubic-bezier(0.16, 1, 0.3, 1)" }
+  },
+  "semantic": {
+    "dark": {
+      "bg": "{navy.900}", "bg-sunken": "{navy.950}", "surface": "{navy.850}", "surface-2": "{navy.800}", "surface-3": "{navy.700}",
+      "line": "{navy.700}", "line-strong": "{navy.600}",
+      "fg": "#f1f3f9", "fg-muted": "{slate.400}", "fg-subtle": "{slate.450}",
+      "primary": "{orange.500}", "primary-hover": "{orange.400}", "primary-active": "{orange.600}", "primary-fg": "#1a0f05", "primary-soft": "rgba(249,115,22,0.14)",
+      "secondary": "{indigo.500}", "secondary-soft": "rgba(99,102,241,0.16)", "secondary-fg": "{indigo.300}",
+      "ring": "{indigo.400}",
+      "success": "{green.500}", "warning": "{amber.500}", "danger": "{red.500}", "info": "{cyan.400}"
+    },
+    "light": {
+      "bg": "{slate.50}", "bg-sunken": "{slate.100}", "surface": "{white}", "surface-2": "{slate.100}", "surface-3": "{slate.200}",
+      "line": "{slate.200}", "line-strong": "{slate.300}",
+      "fg": "{slate.900}", "fg-muted": "{slate.550}", "fg-subtle": "{slate.500}",
+      "primary": "{orange.700}", "primary-hover": "{orange.600}", "primary-active": "{orange.800}", "primary-fg": "{white}", "primary-soft": "rgba(194,65,12,0.12)",
+      "secondary": "{indigo.600}", "secondary-soft": "rgba(79,70,229,0.12)", "secondary-fg": "{indigo.600}",
+      "ring": "{indigo.500}",
+      "success": "{green.700}", "warning": "{amber.700}", "danger": "{red.600}", "info": "{cyan.700}"
+    }
+  },
+  "component": {
+    "button": { "height": "38px", "height-sm": "32px", "height-lg": "46px", "radius": "{radius.md}", "press-scale": "0.98", "focus": "2px solid {ring} offset 2px" },
+    "field": { "height": "38px", "radius": "{radius.md}", "focus-ring": "2px {ring} @ 25%" },
+    "card": { "radius": "{radius.lg}", "padding": "20px", "border": "1px {line}", "shadow": "shadow-sm" },
+    "chip": { "height": "32px", "radius": "{radius.pill}", "active": "border {secondary} + bg {secondary-soft}" },
+    "sidebar": { "width": "240px", "item-min-height": "44px" },
+    "toast": { "width": "360px", "ttl-ms": 4000, "ttl-danger-ms": 8000 }
+  },
+  "contrast": {
+    "note": "Measured in-app (WCAG 2.x). All text pairs >= 4.5:1 in both themes.",
+    "dark": { "fg/surface": 16.0, "fg-muted/surface": 7.0, "fg-subtle/surface": 4.7, "primary-fg/primary": 6.7, "secondary-fg/surface": 8.9, "danger/surface": 4.7 },
+    "light": { "fg/surface": 17.3, "fg-muted/surface-2": 5.1, "fg-subtle/surface": 4.7, "primary-fg/primary": 5.2, "secondary-fg/surface": 6.3 }
+  }
+}
