@@ -86,9 +86,31 @@ class Settings:
         return self._data.get(key, default)
 
     def update(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Apply known keys only; coerce to the default's type and range-check numerics.
+        Raises ValueError on bad input."""
         for k, v in values.items():
-            if k in DEFAULT_SETTINGS:
-                self._data[k] = v
+            if k not in DEFAULT_SETTINGS:
+                continue
+            default = DEFAULT_SETTINGS[k]
+            if isinstance(default, bool):
+                v = bool(v)
+            elif isinstance(default, int):
+                v = int(v)
+            elif isinstance(default, float):
+                v = float(v)
+            else:
+                v = "" if v is None else str(v)
+            if k == "concurrency" and not 1 <= v <= 8:
+                raise ValueError("concurrency phải từ 1 đến 8")
+            if k == "vc_steps" and not 0 <= v <= 100:
+                raise ValueError("vc_steps phải từ 0 đến 100")
+            if k in ("default_rate", "default_volume") and not 0.2 <= v <= 3.0:
+                raise ValueError(f"{k} ngoài khoảng cho phép")
+            if k == "default_format" and v not in ("mp3", "wav"):
+                raise ValueError("default_format phải là mp3 hoặc wav")
+            if k in ("asr_device", "vc_device") and v not in ("auto", "cuda", "cpu"):
+                raise ValueError(f"{k} phải là auto/cuda/cpu")
+            self._data[k] = v
         self.save()
         return dict(self._data)
 

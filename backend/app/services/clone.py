@@ -8,7 +8,6 @@ VC works on audio, not text, so a single reference clip works for every language
 from __future__ import annotations
 
 import logging
-import subprocess
 import sys
 import threading
 import uuid
@@ -17,12 +16,13 @@ from typing import Any, Callable
 
 from ..config import CACHE_DIR, MODELS_DIR, PROFILES_DIR, settings
 from ..db import db
-from . import audio, ffmpeg, providers, voices
+from . import audio, ffmpeg, procs, providers, voices
 
 log = logging.getLogger(__name__)
 
 REF_MAX_SECONDS = 25  # Seed-VC uses at most ~25s of reference
-_lock = threading.Lock()
+_lock = threading.Lock()        # guards model (un)loading
+_infer_lock = threading.Lock()  # one forward pass at a time: torch modules aren't re-entrant, VRAM is finite
 _wrapper: Any = None
 _wrapper_device: str | None = None
 
@@ -86,7 +86,7 @@ def nvidia_driver_cuda() -> float | None:
     try:
         import re
 
-        out = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=5).stdout
+        out = procs.run_hidden(["nvidia-smi"], timeout=5).stdout
         m = re.search(r"CUDA Version:\s*([\d.]+)", out)
         return float(m.group(1)) if m else None
     except Exception:
@@ -109,10 +109,28 @@ def _torch_index() -> str:
     return "https://download.pytorch.org/whl/cpu"
 
 
-def install(progress: Callable[[float, str], None] | None = None) -> None:
-    """pip install torch (CUDA if NVIDIA present) + seed-vc. Long: 2–3 GB."""
-    py = sys.executable
-    subprocess.run([py, "-m", "ensurepip", "--upgrade"], capture_output=True)
+def _pip(args: list[str], progress: Callable[[float, str], None] | None, base: float, span: float,
+         label: str, should_cancel: Callable[[], bool] | None) -> None:
+    """Run pip with live line-by-line progress (collecting/downloading/installing) and cancel support."""
+    seen = {"n": 0}
+
+    def on_line(line: str) -> None:
+        seen["n"] += 1
+        low = line.strip()
+        if any(k in low for k in ("Collecting", "Downloading", "Installing", "Successfully", "Using cached")):
+            if progress:
+                progress(min(base + span * 0.95, base + span * (0.05 + seen["n"] / 60.0)), f"{label}: {low[:90]}")
+
+    code, tail = procs.run_streaming([sys.executable, "-m", "pip", "install", "--break-system-packages",
+                                      "--progress-bar", "off", *args], on_line=on_line, should_cancel=should_cancel)
+    if code != 0:
+        raise RuntimeError(f"{label} thất bại: {tail[-1500:]}")
+
+
+def install(progress: Callable[[float, str], None] | None = None,
+            should_cancel: Callable[[], bool] | None = None) -> None:
+    """pip install torch (CUDA if NVIDIA present) + seed-vc. Long: 2–3 GB. Cancellable."""
+    procs.run_hidden([sys.executable, "-m", "ensurepip", "--upgrade"])
     if not torch_info()["installed"]:
         idx = _torch_index()
         if progress:
@@ -120,15 +138,10 @@ def install(progress: Callable[[float, str], None] | None = None) -> None:
         pkgs = ["torch", "torchaudio", "torchvision"]
         if idx.endswith("cu118"):  # newest torch has no cu118 wheels; 2.7.1 is the last one
             pkgs = ["torch==2.7.1", "torchaudio==2.7.1", "torchvision==0.22.1"]
-        proc = subprocess.run([py, "-m", "pip", "install", "--quiet", "--break-system-packages", *pkgs, "--index-url", idx],
-                              capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(f"Cài PyTorch thất bại: {proc.stderr[-1500:]}")
+        _pip([*pkgs, "--index-url", idx], progress, 0.05, 0.55, "Cài PyTorch", should_cancel)
     if progress:
         progress(0.6, "Đang cài seed-vc và phụ thuộc…")
-    proc = subprocess.run([py, "-m", "pip", "install", "--quiet", "--break-system-packages", "seed-vc==0.4.3"], capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Cài seed-vc thất bại: {proc.stderr[-1500:]}")
+    _pip(["seed-vc==0.4.3"], progress, 0.6, 0.3, "Cài seed-vc", should_cancel)
     if progress:
         progress(0.9, "Đang tải model Seed-VC (lần đầu)…")
     try:
@@ -289,17 +302,25 @@ def convert(src: Path, profile: dict[str, Any], out: Path, diffusion_steps: int 
                                       inference_cfg_rate=0.7, f0_condition=False, auto_f0_adjust=True,
                                       pitch_shift=0, stream_output=False))
 
-    try:
-        wav = _run(dev)
-    except RuntimeError as exc:
-        if "out of memory" in str(exc).lower() and dev == "cuda":
-            log.warning("CUDA OOM, retrying on CPU (slow)")
-            import torch  # type: ignore
+    global _wrapper, _wrapper_device
+    with _infer_lock:  # serialize forward passes (thread-safety + VRAM)
+        try:
+            wav = _run(dev)
+        except RuntimeError as exc:
+            if "out of memory" in str(exc).lower() and dev == "cuda":
+                log.warning("CUDA OOM, retrying on CPU (slow)")
+                import gc
 
-            torch.cuda.empty_cache()
-            wav = _run("cpu")
-        else:
-            raise
+                import torch  # type: ignore
+
+                with _lock:  # drop the CUDA copy before loading a CPU one
+                    _wrapper = None
+                    _wrapper_device = None
+                gc.collect()
+                torch.cuda.empty_cache()
+                wav = _run("cpu")
+            else:
+                raise
     if wav is None:
         raise RuntimeError("Seed-VC không trả về audio")
     wav = np.asarray(wav, dtype=np.float32).squeeze()

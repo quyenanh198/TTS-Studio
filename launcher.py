@@ -90,7 +90,19 @@ def main() -> None:
     _ = window
     from app.config import DATA_DIR
 
-    webview.start(private_mode=False, storage_path=str(DATA_DIR / "webview"))
+    try:
+        webview.start(private_mode=False, storage_path=str(DATA_DIR / "webview"))
+    finally:
+        # Worker threads are non-daemon: without this, closing the window leaves an invisible
+        # pythonw.exe alive until every running job (or a multi-GB pip install) finishes.
+        try:
+            from app.jobs import jobs
+
+            jobs.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
+        log.info("window closed — exiting")
+        os._exit(0)
 
 
 if __name__ == "__main__":

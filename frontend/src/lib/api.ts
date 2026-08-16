@@ -49,7 +49,6 @@ export interface Voice {
   lang: string
   gender: 'female' | 'male' | 'unknown'
   hot?: boolean
-  emoji?: string
 }
 
 export interface Chapter {
@@ -88,6 +87,16 @@ export interface VoiceProfile {
 }
 
 const BASE = ''
+
+/** Fire-and-forget helper for actions whose only feedback is a toast (open folder, cancel…). */
+export async function safeCall(p: Promise<unknown>, title = 'Có lỗi xảy ra'): Promise<void> {
+  try {
+    await p
+  } catch (e) {
+    const { toastError } = await import('../store/ui')
+    toastError(e, title)
+  }
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
@@ -142,6 +151,10 @@ export const api = {
 
   // ---- Transcript (Phase 5) ----
   transcribe: (body: TranscribeRequest) => req<Job>('/api/transcript', json(body)),
+  gpu: () => req<GpuStatus>('/api/transcript/gpu'),
+  installGpu: () => req<Job>('/api/transcript/gpu/install', { method: 'POST' }),
+  exportTranscript: (body: ExportTranscriptRequest) =>
+    req<{ out_dir: string; outputs: { name: string; path: string; kind: string }[] }>('/api/transcript/export', json(body)),
   uploadMedia: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -188,6 +201,21 @@ export interface TranscribeRequest {
   separate_vocals: boolean
   word_timestamps: boolean
   formats: string[]
+  initial_prompt?: string | null
+}
+
+export interface ExportTranscriptRequest {
+  cues: Cue[]
+  formats: string[]
+  stem: string
+  out_dir?: string | null
+  title?: string
+}
+
+export interface GpuStatus {
+  cuda: boolean
+  libs_installed: boolean
+  demucs: boolean
 }
 
 export interface AsrModelInfo {
@@ -202,4 +230,6 @@ export interface CloneStatus {
   device: string
   engines: string[]
   message: string
+  torch: { installed: boolean; version: string | null; cuda: boolean; device_name: string | null }
+  models_ready: boolean
 }

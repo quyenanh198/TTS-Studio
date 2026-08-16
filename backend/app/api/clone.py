@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from ..config import CACHE_DIR
 from ..db import db
@@ -33,7 +34,7 @@ def clone_install() -> dict[str, Any]:
         return active[0]
 
     def job(ctx: JobContext) -> dict[str, Any]:
-        clone.install(ctx.progress)
+        clone.install(ctx.progress, should_cancel=lambda: ctx.cancelled)
         return clone.status()
 
     return jobs.submit("clone_install", {"title": "Cài đặt Clone giọng (PyTorch + Seed-VC)"}, job)
@@ -61,7 +62,8 @@ async def create_profile(
         while chunk := await file.read(1 << 20):
             f.write(chunk)
     try:
-        return clone.create_profile(name, gender, language, dest, notes, base_voice or None)
+        # ffmpeg loudnorm etc. is blocking — keep it off the event loop
+        return await run_in_threadpool(clone.create_profile, name, gender, language, dest, notes, base_voice or None)
     except RuntimeError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:

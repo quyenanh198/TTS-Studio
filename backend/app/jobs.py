@@ -70,6 +70,11 @@ class JobManager:
         return db.get_job(job_id)  # type: ignore[return-value]
 
     def _run(self, ctx: JobContext, fn: JobFn) -> None:
+        if ctx.cancelled:  # cancelled while still queued
+            self._update(ctx.id, status="cancelled", message="Đã hủy")
+            with self._lock:
+                self._contexts.pop(ctx.id, None)
+            return
         self._update(ctx.id, status="running", message="Đang xử lý...")
         try:
             result = fn(ctx)
@@ -103,19 +108,43 @@ class JobManager:
     def _broadcast(self, job: dict[str, Any] | None) -> None:
         if job is None or self._loop is None:
             return
-        for q in list(self._subscribers):
+        with self._lock:
+            subs = list(self._subscribers)
+        for q in subs:
             try:
-                self._loop.call_soon_threadsafe(q.put_nowait, job)
+                self._loop.call_soon_threadsafe(self._offer, q, job)
             except RuntimeError:
+                pass
+
+    @staticmethod
+    def _offer(q: asyncio.Queue, job: dict[str, Any]) -> None:
+        try:
+            q.put_nowait(job)
+        except asyncio.QueueFull:
+            # slow consumer: drop the oldest event rather than raising inside the loop callback
+            try:
+                q.get_nowait()
+                q.put_nowait(job)
+            except Exception:  # noqa: BLE001
                 pass
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=1000)
-        self._subscribers.add(q)
+        with self._lock:
+            self._subscribers.add(q)
         return q
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
-        self._subscribers.discard(q)
+        with self._lock:
+            self._subscribers.discard(q)
+
+    def shutdown(self) -> None:
+        """Best-effort stop for process exit: flag every running job, drop queued ones."""
+        with self._lock:
+            ctxs = list(self._contexts.values())
+        for c in ctxs:
+            c._cancel.set()
+        self._pool.shutdown(wait=False, cancel_futures=True)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         return db.get_job(job_id)

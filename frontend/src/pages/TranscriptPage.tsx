@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Cpu, Download, FileAudio, FolderOpen, Languages, ListMusic, Loader2, Play, Save, Send, Square, Upload } from 'lucide-react'
-import { api, type AsrModelInfo, type Cue, type Job } from '../lib/api'
+import { api, safeCall, type AsrModelInfo, type Cue, type GpuStatus, type Job } from '../lib/api'
 import { useJobs, selectJobsByKind } from '../store/jobs'
 import { useTransfer } from '../store/transfer'
 import { toastError, toastOk } from '../store/ui'
@@ -17,7 +17,6 @@ interface TranscriptResult {
   model: string
   source: string
 }
-interface GpuInfo { cuda: boolean; libs_installed: boolean; demucs: boolean }
 
 const LANGS: [string, string][] = [
   ['', 'Tự động phát hiện'], ['vi', 'Tiếng Việt'], ['en', 'English'], ['zh', 'Trung'], ['ja', 'Nhật'], ['ko', 'Hàn'],
@@ -37,7 +36,7 @@ export default function TranscriptPage() {
   const [separate, setSeparate] = useState(false)
   const [formats, setFormats] = useState<string[]>(['srt', 'txt'])
   const [prompt, setPrompt] = useState('')
-  const [gpu, setGpu] = useState<GpuInfo | null>(null)
+  const [gpu, setGpu] = useState<GpuStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -52,7 +51,7 @@ export default function TranscriptPage() {
   const refreshModels = () => api.asrModels().then(setModels).catch(() => undefined)
   useEffect(() => {
     refreshModels()
-    fetch('/api/transcript/gpu').then((r) => r.json()).then(setGpu).catch(() => undefined)
+    api.gpu().then(setGpu).catch(() => undefined)
     api.settings().then((s) => { setModel(s.asr_model); setDevice(s.asr_device) }).catch(() => undefined)
   }, [])
   const modelJobDone = modelJobs.filter((j) => j.status === 'done').length
@@ -73,7 +72,7 @@ export default function TranscriptPage() {
   const start = async () => {
     if (!media) return
     try {
-      await api.transcribe({ path: media.path, model, language: lang || null, device, separate_vocals: separate, word_timestamps: wordTs, formats, initial_prompt: prompt || undefined } as never)
+      await api.transcribe({ path: media.path, model, language: lang || null, device, separate_vocals: separate, word_timestamps: wordTs, formats, initial_prompt: prompt || null })
       toastOk('Bắt đầu nhận dạng', `${media.name} · model ${model}`)
     } catch (e) { toastError(e, 'Không chạy được transcript') }
   }
@@ -141,7 +140,7 @@ export default function TranscriptPage() {
                 <Alert kind="info">
                   GPU chưa dùng được cho Whisper.{' '}
                   {gpu.libs_installed ? 'Thư viện đã cài — khởi động lại ứng dụng.' : (
-                    <button className="font-semibold underline underline-offset-2" disabled={gpuJob?.status === 'running'} onClick={() => fetch('/api/transcript/gpu/install', { method: 'POST' })}>Cài thư viện CUDA (~1 GB)</button>
+                    <button className="font-semibold underline underline-offset-2" disabled={gpuJob?.status === 'running' || gpuJob?.status === 'queued'} onClick={() => safeCall(api.installGpu(), 'Không cài được thư viện CUDA')}>Cài thư viện CUDA (~1 GB)</button>
                   )}
                   {gpuJob && gpuJob.status !== 'done' && <div className="mt-2 text-fg"><ProgressBar value={gpuJob.progress} label={gpuJob.message} status={gpuJob.status} /></div>}
                 </Alert>
@@ -191,17 +190,16 @@ function ResultPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
   const text = useMemo(() => cues.map((c) => c.text).join('\n'), [cues])
   const stem = res?.source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'transcript'
 
-  const update = (i: number, patch: Partial<Cue>) => { setCues((cs) => cs.map((c, k) => (k === i ? { ...c, ...patch } : c))); setDirty(true) }
+  const update = useCallback((i: number, text: string) => { setCues((cs) => cs.map((c, k) => (k === i ? { ...c, text } : c))); setDirty(true) }, [])
   const exportEdited = async (fmts: string[]) => {
     if (!res) return
     try {
-      const r = await fetch('/api/transcript/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues, formats: fmts, stem, out_dir: res.out_dir, title: '' }) })
-      const j = await r.json()
-      if (!r.ok) throw new Error(String(j.detail))
-      toastOk('Đã lưu', j.outputs.map((o: { name: string }) => o.name).join(', '))
+      const j = await api.exportTranscript({ cues, formats: fmts, stem, out_dir: res.out_dir, title: '' })
+      toastOk('Đã lưu', j.outputs.map((o) => o.name).join(', '))
       setDirty(false)
     } catch (e) { toastError(e, 'Không lưu được') }
   }
+  const seek = useCallback((t: number) => { if (audioRef.current) { audioRef.current.currentTime = t; audioRef.current.play().catch(() => undefined) } }, [])
   const sendToTts = () => {
     if (!res) return
     send({ title: stem, source: res.source, format: 'srt', total_chars: text.length, chapters: [{ index: 1, title: stem, text, chars: text.length, cues }] })
@@ -217,18 +215,13 @@ function ResultPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
             <span>Ngôn ngữ <b className="text-fg">{res.language}</b> ({Math.round(res.language_probability * 100)}%)</span>
             <span className="tabular-nums">· {cues.length} dòng · {fmtTime(res.duration)} · {res.model}/{res.device}</span>
-            <button className="chip ml-auto" onClick={() => api.openPath(res.out_dir)}><FolderOpen size={12} /> Thư mục</button>
+            <button className="chip ml-auto" onClick={() => safeCall(api.openPath(res.out_dir), 'Không mở được thư mục')}><FolderOpen size={12} /> Thư mục</button>
             {res.outputs.map((o) => <a key={o.path} className="chip uppercase" href={api.fileUrl(o.path)} target="_blank" rel="noreferrer">{o.kind}</a>)}
           </div>
           <audio ref={audioRef} className="h-9 w-full" controls preload="none" src={api.fileUrl(res.source)} />
           <div className="list max-h-[420px] overflow-auto">
-            {cues.map((c, i) => (
-              <div key={i} className="grid grid-cols-[60px_60px_1fr] items-center gap-2 border-b border-line px-2 py-1 last:border-b-0">
-                <button className="rounded px-1 text-left font-mono text-[11px] tabular-nums text-secondary-fg hover:underline" title="Phát từ đây" onClick={() => { if (audioRef.current) { audioRef.current.currentTime = c.start; audioRef.current.play() } }}>{fmtTime(c.start)}</button>
-                <span className="font-mono text-[11px] tabular-nums text-fg-subtle">{fmtTime(c.end)}</span>
-                <input className="input !h-8 !bg-transparent !border-transparent hover:!border-line focus:!bg-surface-2" aria-label={`Dòng ${i + 1}`} value={c.text} onChange={(e) => update(i, { text: e.target.value })} />
-              </div>
-            ))}
+            {/* key=index is safe: rows are never inserted/reordered, only edited in place */}
+            {cues.map((c, i) => <CueRow key={i} i={i} start={c.start} end={c.end} text={c.text} onSeek={seek} onChange={update} />)}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn-ghost" onClick={() => exportEdited(['srt'])}><Save size={14} /> Lưu SRT{dirty && <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="có thay đổi" />}</button>
@@ -241,3 +234,13 @@ function ResultPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
     </Card>
   )
 }
+
+const CueRow = memo(function CueRow({ i, start, end, text, onSeek, onChange }: { i: number; start: number; end: number; text: string; onSeek: (t: number) => void; onChange: (i: number, text: string) => void }) {
+  return (
+    <div className="grid grid-cols-[60px_60px_1fr] items-center gap-2 border-b border-line px-2 py-1 last:border-b-0">
+      <button className="rounded px-1 text-left font-mono text-[11px] tabular-nums text-secondary-fg hover:underline" title="Phát từ đây" onClick={() => onSeek(start)}>{fmtTime(start)}</button>
+      <span className="font-mono text-[11px] tabular-nums text-fg-subtle">{fmtTime(end)}</span>
+      <input className="input h-8! border-transparent! bg-transparent! hover:border-line! focus:bg-surface-2!" aria-label={`Dòng ${i + 1}`} value={text} onChange={(e) => onChange(i, e.target.value)} />
+    </div>
+  )
+})

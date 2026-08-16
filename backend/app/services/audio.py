@@ -104,6 +104,10 @@ def effects_filter(rate: float = 1.0, volume: float = 1.0, keep_pitch: bool = Tr
 
 
 def apply_effects(src: Path, out: Path, **kw) -> Path:
+    # asetrate needs the REAL input rate (clone WAVs are 22050, TikTok MP3s vary); the default
+    # 24000 would silently shift pitch/tempo. Probe unless caller passed sr explicitly.
+    if "sr" not in kw:
+        kw["sr"] = ffmpeg.probe_sample_rate(src) or 24000
     af = effects_filter(**kw)
     out.parent.mkdir(parents=True, exist_ok=True)
     args = ["-i", str(src)]
@@ -140,13 +144,13 @@ def make_m4b(inputs: Sequence[Path], titles: Sequence[str], out: Path, book_titl
     lst = out.with_suffix(".txt")
     lst.write_text("\n".join(f"file '{_q(p)}'" for p in inputs) + "\n", encoding="utf-8")
     meta = out.with_suffix(".ffmeta")
-    lines = [";FFMETADATA1", f"title={book_title}", "genre=Audiobook", ""]
+    lines = [";FFMETADATA1", f"title={_ffmeta(book_title)}", "genre=Audiobook", ""]
     t = 0.0
     for title, d in zip(titles, durations):
         start_ms = int(math.floor(t * 1000))
         end_ms = int(math.floor((t + d) * 1000))
         lines += ["[CHAPTER]", "TIMEBASE=1/1000", f"START={start_ms}", f"END={end_ms}",
-                  f"title={title}", ""]
+                  f"title={_ffmeta(title)}", ""]
         t += d
     meta.write_text("\n".join(lines), encoding="utf-8")
     ffmpeg.run(["-f", "concat", "-safe", "0", "-i", str(lst), "-i", str(meta), "-map_metadata", "1",
@@ -154,6 +158,14 @@ def make_m4b(inputs: Sequence[Path], titles: Sequence[str], out: Path, book_titl
     lst.unlink(missing_ok=True)
     meta.unlink(missing_ok=True)
     return out
+
+
+def _ffmeta(value: str) -> str:
+    """Escape ffmetadata special characters (=, ;, #, backslash) and newlines."""
+    out = str(value or "").replace("\\", "\\\\")
+    for ch in "=;#":
+        out = out.replace(ch, "\\" + ch)
+    return out.replace("\n", " ").replace("\r", " ")
 
 
 def duration(path: Path) -> float:

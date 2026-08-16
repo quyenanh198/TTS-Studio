@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, CheckSquare, ClipboardPaste, Download, FileUp, FolderOpen, Layers, Loader2, Mic2, Play, Settings2, Sparkles, Square as SquareIcon, Trash2, Upload, Wand2 } from 'lucide-react'
-import { api, type Book, type Chapter, type SynthesizeRequest, type Voice } from '../lib/api'
+import { api, safeCall, type Book, type Chapter, type SynthesizeRequest, type Voice } from '../lib/api'
 import { useJobs, selectJobsByKind } from '../store/jobs'
 import { useTransfer } from '../store/transfer'
 import { toastError, toastOk } from '../store/ui'
@@ -19,7 +19,7 @@ interface TtsResult {
 
 const ACCEPT = '.txt,.md,.markdown,.epub,.pdf,.docx,.srt,.mobi,.azw,.azw3,.fb2'
 
-export default function TtsPage() {
+export default function TtsPage({ active = true }: { active?: boolean }) {
   const [tab, setTab] = useState<'paste' | 'file'>('paste')
   const [pasted, setPasted] = useState('')
   const [pasteTitle, setPasteTitle] = useState('')
@@ -95,22 +95,25 @@ export default function TtsPage() {
       toastOk(`Đã đọc ${f.name}`, `${b.chapters.length} chương · ${fmtNum(b.total_chars)} ký tự`)
     } catch (e) { toastError(e, 'Không đọc được file') } finally { setBusy(false); if (fileRef.current) fileRef.current.value = '' }
   }
-  const toggle = (i: number) => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
+  const toggle = (i: number) => setSelected((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })
   const updateChapter = (i: number, patch: Partial<Chapter>) =>
     setBook((b) => (b ? { ...b, chapters: b.chapters.map((c) => (c.index === i ? { ...c, ...patch, chars: (patch.text ?? c.text).length } : c)) } : b))
-  const removeChapter = (i: number) =>
-    setBook((b) => {
-      if (!b) return b
-      const chapters = b.chapters.filter((c) => c.index !== i).map((c, k) => ({ ...c, index: k + 1 }))
-      setSelected(new Set(chapters.map((c) => c.index)))
-      setEditing(null)
-      return { ...b, chapters }
-    })
+  const removeChapter = (i: number) => {
+    if (!book) return
+    const kept = book.chapters.filter((c) => c.index !== i)
+    const chapters = kept.map((c, k) => ({ ...c, index: k + 1 }))
+    const nextSel = new Set<number>()
+    kept.forEach((c, k) => { if (selected.has(c.index)) nextSel.add(k + 1) })
+    setBook({ ...book, chapters })
+    setSelected(nextSel)
+    setEditing(null)
+  }
 
   const chosen = useMemo(() => (book ? book.chapters.filter((c) => selected.has(c.index)) : []), [book, selected])
   const totalChars = chosen.reduce((n, c) => n + c.text.length, 0)
   const estMin = Math.max(1, Math.round(totalChars / 900 / rate))
-  const canSubmit = !!book && chosen.length > 0 && !running
+  const rangeOk = mode !== 'range' || (rangeStart >= 1 && rangeEnd >= rangeStart && rangeEnd <= (book?.chapters.length ?? 0))
+  const canSubmit = !!book && chosen.length > 0 && !running && rangeOk
 
   const submit = async () => {
     if (!canSubmit || !book) return
@@ -119,16 +122,19 @@ export default function TtsPage() {
       title: book.title || 'Audio',
       chapters: chosen.map((c) => ({ title: c.title, text: c.text, cues: c.cues ?? null })),
       voice, rate, volume, keep_pitch: keepPitch, pitch, format, export_mode: mode,
-      range_start: rangeStart, range_end: rangeEnd, merge_every: mergeEvery || undefined,
+      ...(mode === 'range' ? { range_start: Math.max(1, rangeStart || 1), range_end: Math.max(1, rangeEnd || 1), merge_every: mergeEvery || undefined } : {}),
       make_srt: makeSrt, make_zip: makeZip, make_m4b: makeM4b, clone_profile: isClone ? voice.slice(6) : null,
     }
     try { await api.synthesize(body); toastOk('Đã thêm vào hàng đợi', `${chosen.length} chương · giọng ${voiceObj?.name ?? voice}`) } catch (e) { toastError(e, 'Không tạo được job') }
   }
+  const submitRef = useRef(submit)
+  submitRef.current = submit
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submit() } }
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submitRef.current() } }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [active])
 
   return (
     <div className="mx-auto max-w-[1440px] p-6">
@@ -251,6 +257,7 @@ export default function TtsPage() {
                   Từ <input className="input !h-8 !w-20" type="number" min={1} aria-label="Từ chương" value={rangeStart} onChange={(e) => setRangeStart(Number(e.target.value))} />
                   đến <input className="input !h-8 !w-20" type="number" min={1} aria-label="Đến chương" value={rangeEnd} onChange={(e) => setRangeEnd(Number(e.target.value))} />
                   · gộp mỗi <input className="input !h-8 !w-20" type="number" min={0} aria-label="Gộp mỗi N chương" value={mergeEvery} onChange={(e) => setMergeEvery(Number(e.target.value))} /> chương (0 = một file)
+                  {!rangeOk && <span className="w-full text-danger">Khoảng chương không hợp lệ (1 ≤ từ ≤ đến ≤ {book?.chapters.length ?? 0}).</span>}
                 </div>
               )}
             </div>
@@ -279,7 +286,7 @@ function ResultView({ r }: { r: TtsResult }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
         <span className="tabular-nums">{r.outputs.length} file · {fmtTime(r.duration)}</span>
-        <button className="chip ml-auto" onClick={() => api.openPath(r.out_dir)}><FolderOpen size={12} /> Mở thư mục</button>
+        <button className="chip ml-auto" onClick={() => safeCall(api.openPath(r.out_dir), 'Không mở được thư mục')}><FolderOpen size={12} /> Mở thư mục</button>
         {r.zip && <a className="chip" href={api.fileUrl(r.zip)} target="_blank" rel="noreferrer">ZIP</a>}
       </div>
       <div className="list max-h-64 overflow-auto">

@@ -96,7 +96,7 @@ def gpu_status() -> dict[str, Any]:
 @router.post("/transcript/gpu/install")
 def gpu_install() -> dict[str, Any]:
     def job(ctx: JobContext) -> dict[str, Any]:
-        asr.install_gpu_support(ctx.progress)
+        asr.install_gpu_support(ctx.progress, should_cancel=lambda: ctx.cancelled)
         return {"ok": True}
 
     return jobs.submit("gpu_install", {"title": "Cài GPU (cuBLAS/cuDNN)"}, job)
