@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Cpu, Download, FolderOpen, Monitor, Moon, RefreshCw, Save, SlidersHorizontal, Sun } from 'lucide-react'
-import { api, safeCall, type Settings, type SystemInfo } from '../lib/api'
+import { api, safeCall, type AsrModelInfo, type Settings, type SystemInfo, type Voice } from '../lib/api'
 import { useJobs, selectJobsByKind } from '../store/jobs'
 import { toastError, toastOk, useUi } from '../store/ui'
-import { Alert, Card, Field, PageHeader, ProgressBar, Segmented, Skeleton } from '../components/ui'
+import { Alert, Card, Field, PageHeader, ProgressBar, Segmented, Skeleton, Slider } from '../components/ui'
 
 export default function SettingsPage() {
   const [sys, setSys] = useState<SystemInfo | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [voices, setVoices] = useState<Voice[]>([])
+  const [models, setModels] = useState<AsrModelInfo[]>([])
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const ffJob = useJobs(selectJobsByKind('ffmpeg_install'))[0]
@@ -20,7 +22,11 @@ export default function SettingsPage() {
     setSettings(st)
     setDirty(false)
   }
-  useEffect(() => { refresh().catch((e) => toastError(e)) }, [])
+  useEffect(() => {
+    refresh().catch((e) => toastError(e))
+    api.voices().then(setVoices).catch(() => undefined)
+    api.asrModels().then(setModels).catch(() => undefined)
+  }, [])
   const prevFf = useRef<string | undefined>(undefined)
   useEffect(() => {
     // react only to a live running→done transition, not to a historical job on mount
@@ -96,6 +102,23 @@ export default function SettingsPage() {
             </Field>
             <Field label="Thiết bị Clone giọng">
               <select className="input" value={settings.vc_device} onChange={(e) => set('vc_device', e.target.value)}><option value="auto">Tự động</option><option value="cuda">GPU (CUDA)</option><option value="cpu">CPU</option></select>
+            </Field>
+            <Field label="Giọng mặc định (trang Tạo giọng nói)" className="md:col-span-2">
+              <select className="input" value={settings.default_voice} onChange={(e) => set('default_voice', e.target.value)}>
+                {!voices.some((v) => v.id === settings.default_voice) && <option value={settings.default_voice}>{settings.default_voice}</option>}
+                {voices.map((v) => <option key={v.id} value={v.id}>{v.name} · {v.locale} · {v.provider === 'edge' ? 'Edge' : v.provider === 'tiktok' ? 'TikTok' : 'Clone'}</option>)}
+              </select>
+            </Field>
+            <Slider label="Tốc độ mặc định" value={settings.default_rate} min={0.5} max={2} step={0.05} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => set('default_rate', v)} />
+            <Slider label="Âm lượng mặc định" value={settings.default_volume} min={0.2} max={2} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set('default_volume', v)} />
+            <Field label="Cao độ khi đổi tốc độ (mặc định)">
+              <Segmented ariaLabel="Cao độ mặc định" value={settings.keep_pitch ? 'keep' : 'change'} onChange={(v) => set('keep_pitch', v === 'keep')} options={[{ value: 'keep', label: 'Giữ nguyên' }, { value: 'change', label: 'Đổi theo tốc độ' }]} />
+            </Field>
+            <Field label="Model Whisper mặc định">
+              <select className="input" value={settings.asr_model} onChange={(e) => set('asr_model', e.target.value)}>
+                {models.length === 0 && <option value={settings.asr_model}>{settings.asr_model}</option>}
+                {models.map((m) => <option key={m.name} value={m.name}>{m.name}{m.downloaded ? ' ✓' : ''} — {m.desc}</option>)}
+              </select>
             </Field>
             <Field label="Chất lượng clone (bước diffusion)" className="md:col-span-2">
               <select className="input" value={settings.vc_steps ?? 0} onChange={(e) => set('vc_steps', Number(e.target.value))}>
