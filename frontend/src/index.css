@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --color-bg: #0b0f19;
+  --color-panel: #111827;
+  --color-panel2: #161f31;
+  --color-line: #1f2a3f;
+  --color-text: #e5e7eb;
+  --color-muted: #8b95a7;
+  --color-accent: #7c5cff;
+  --color-accent2: #22d3ee;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-err: #f87171;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #2b3650 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #2b3650; border-radius: 8px; }
+
+@layer components {
+  .btn, .btn-primary, .btn-ghost, .btn-danger { @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed; }
+  .btn-primary { @apply bg-accent text-white hover:brightness-110 shadow-[0_0_20px_rgba(124,92,255,.35)]; }
+  .btn-ghost { @apply bg-panel2 text-text hover:bg-line; }
+  .btn-danger { @apply bg-err/15 text-err hover:bg-err/25; }
+  .card { @apply rounded-xl border border-line bg-panel p-4; }
+  .input { @apply w-full rounded-lg border border-line bg-panel2 px-3 py-2 text-sm text-text outline-none focus:border-accent; }
+  .label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-muted; }
+  .chip { @apply inline-flex items-center rounded-full border border-line px-2.5 py-1 text-xs text-muted hover:text-text hover:border-accent/60 cursor-pointer; }
+  .chip-active { @apply border-accent! bg-accent/15 text-text!; }
+  .tag { @apply rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase; }
+}
+
+input[type="range"] { accent-color: var(--color-accent); }
