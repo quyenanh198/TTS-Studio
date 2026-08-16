@@ -62,11 +62,13 @@ Lần đầu vào **Cài đặt → Tải FFmpeg**. Whisper model tải trong tr
 ## Đóng gói (portable + installer)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build.ps1        # → dist\TTSStudio\ (Python nhúng + deps + UI)
-iscc installer\TTSStudio.iss                                        # → dist\TTSStudio-Setup-x.y.z.exe (cần Inno Setup 6)
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1        # → dist\TTSStudio\ (Python nhúng + deps + UI, ~420 MB)
+powershell -ExecutionPolicy Bypass -File scripts\installer.ps1    # → dist\TTSStudio-Setup-1.0.0.exe (~94 MB, cần Inno Setup 6)
 ```
 
 `dist\TTSStudio\TTS Studio.bat` chạy trực tiếp; `TTS Studio (no console).vbs` chạy ẩn console. Torch/seed-vc và model được tải khi người dùng bấm cài trong app (giữ installer nhỏ).
+
+Installer cài per-user vào `%LOCALAPPDATA%\Programs\TTSStudio` (không cần quyền admin), tạo shortcut Start Menu/Desktop, gỡ qua Settings → Apps. Yêu cầu Windows 10+ và Microsoft Edge WebView2 Runtime (app tự kiểm tra và mở trang tải nếu thiếu). Log chạy: `%LOCALAPPDATA%\TTSStudio\logs\app.log`.
 
 ## Ghi chú kỹ thuật
 
