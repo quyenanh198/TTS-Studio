@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FolderOpen, History as HistoryIcon, Trash2, XCircle } from 'lucide-react'
-import { api, type Job } from '../lib/api'
+import { api, safeCall, type Job } from '../lib/api'
 import { useJobs, selectAllJobs } from '../store/jobs'
-import { toastError } from '../store/ui'
 import { EmptyState, PageHeader, ProgressBar, StatusTag, fmtTime } from '../components/ui'
 
 const KIND_LABEL: Record<string, string> = {
@@ -39,7 +38,7 @@ export default function HistoryPage() {
   const clearFinished = async () => {
     const finished = jobs.filter((j) => j.status !== 'queued' && j.status !== 'running')
     if (!finished.length || !confirm(`Xóa ${finished.length} job đã kết thúc khỏi lịch sử? (không xóa file đã xuất)`)) return
-    for (const j of finished) await remove(j.id).catch(toastError)
+    for (const j of finished) await remove(j.id)
   }
 
   return (
@@ -58,7 +57,7 @@ export default function HistoryPage() {
         <EmptyState icon={<HistoryIcon size={20} />} title={jobs.length ? 'Không có job phù hợp bộ lọc' : 'Chưa có job nào'} hint={jobs.length ? undefined : 'Mọi tác vụ (tạo giọng, transcript, tải model…) sẽ hiện ở đây kèm tiến độ và kết quả.'} />
       ) : (
         <div className="flex flex-col gap-2.5">
-          {shown.map((j) => <JobRow key={j.id} job={j} onRemove={() => remove(j.id).catch(toastError)} onCancel={() => cancel(j.id).catch(toastError)} />)}
+          {shown.map((j) => <JobRow key={j.id} job={j} onRemove={() => remove(j.id)} onCancel={() => cancel(j.id)} />)}
         </div>
       )}
     </div>
@@ -89,7 +88,7 @@ function JobRow({ job, onRemove, onCancel }: { job: Job; onRemove: () => void; o
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {res.out_dir && <button className="btn-icon" aria-label="Mở thư mục kết quả" title="Mở thư mục" onClick={() => api.openPath(res.out_dir!)}><FolderOpen size={16} /></button>}
+          {res.out_dir && <button className="btn-icon" aria-label="Mở thư mục kết quả" title="Mở thư mục" onClick={() => safeCall(api.openPath(res.out_dir!), 'Không mở được thư mục')}><FolderOpen size={16} /></button>}
           {active ? (
             <button className="btn-icon hover:text-danger" aria-label="Hủy job" title="Hủy" onClick={onCancel}><XCircle size={16} /></button>
           ) : (

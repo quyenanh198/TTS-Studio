@@ -60,14 +60,14 @@
   --secondary-soft: rgba(99, 102, 241, 0.16);
   --secondary-fg: var(--indigo-300);
   --ring: var(--indigo-400);
-  --success: var(--green-500);
-  --success-soft: rgba(34, 197, 94, 0.14);
-  --warning: var(--amber-500);
-  --warning-soft: rgba(245, 158, 11, 0.14);
-  --danger: var(--red-500);
-  --danger-soft: rgba(239, 68, 68, 0.14);
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.12);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
   --info: var(--cyan-400);
-  --info-soft: rgba(34, 211, 238, 0.14);
+  --info-soft: rgba(34, 211, 238, 0.12);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
   --shadow-glow: 0 0 0 1px rgba(249, 115, 22, 0.35), 0 8px 24px rgba(249, 115, 22, 0.25);
@@ -86,22 +86,22 @@
   --fg-muted: var(--slate-550);
   --fg-subtle: var(--slate-500);
   --primary: #c2410c;
-  --primary-hover: var(--orange-600);
+  --primary-hover: #b03a0b;
   --primary-active: #9a3412;
   --primary-fg: var(--white);
-  --primary-soft: rgba(194, 65, 12, 0.12);
+  --primary-soft: rgba(194, 65, 12, 0.08);
   --secondary: var(--indigo-600);
   --secondary-soft: rgba(79, 70, 229, 0.12);
   --secondary-fg: var(--indigo-600);
   --ring: var(--indigo-500);
-  --success: #15803d;
-  --success-soft: rgba(21, 128, 61, 0.12);
-  --warning: #b45309;
-  --warning-soft: rgba(180, 83, 9, 0.12);
-  --danger: #dc2626;
-  --danger-soft: rgba(220, 38, 38, 0.12);
+  --success: #166534;
+  --success-soft: rgba(22, 101, 52, 0.10);
+  --warning: #92400e;
+  --warning-soft: rgba(146, 64, 14, 0.10);
+  --danger: #b91c1c;
+  --danger-soft: rgba(185, 28, 28, 0.10);
   --info: #0e7490;
-  --info-soft: rgba(14, 116, 144, 0.12);
+  --info-soft: rgba(14, 116, 144, 0.10);
   --shadow-sm: 0 1px 2px rgba(22, 26, 43, 0.08);
   --shadow-md: 0 6px 20px rgba(22, 26, 43, 0.10);
   --shadow-glow: 0 0 0 1px rgba(234, 88, 12, 0.3), 0 8px 24px rgba(234, 88, 12, 0.18);
@@ -208,10 +208,10 @@ audio { color-scheme: dark; }
   .btn-lg { height: var(--btn-h-lg); @apply px-5 text-[15px]; }
   .btn-primary { @apply bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-active; box-shadow: var(--shadow-sm); }
   .btn-primary:not(:disabled):hover { box-shadow: var(--shadow-glow); }
-  .btn-secondary { @apply bg-secondary-soft text-secondary-fg hover:bg-secondary/25; }
+  .btn-secondary { @apply bg-secondary-soft text-secondary-fg hover:bg-secondary/20; }
   .btn-ghost { @apply bg-surface-2 text-fg hover:bg-surface-3; }
   .btn-outline { @apply border border-line-strong bg-transparent text-fg hover:bg-surface-2; }
-  .btn-danger { @apply bg-danger-soft text-danger hover:bg-danger/25; }
+  .btn-danger { @apply bg-danger-soft text-danger hover:bg-danger/20; }
   .btn-icon { @apply grid place-items-center rounded-[var(--radius-md)] text-fg-muted transition-colors duration-[var(--dur)] hover:bg-surface-2 hover:text-fg active:scale-[0.96]; width: 36px; height: 36px; }
   .btn-icon-sm { width: 30px; height: 30px; @apply rounded-[var(--radius-sm)]; }
 
@@ -229,8 +229,8 @@ audio { color-scheme: dark; }
   .help { @apply mt-1 text-xs text-fg-subtle; }
 
   .chip { @apply inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-pill)] border border-line bg-transparent px-3 text-xs font-medium text-fg-muted transition-[background-color,color,border-color] duration-[var(--dur)] hover:border-line-strong hover:text-fg active:scale-[0.97] disabled:opacity-40; }
-  .chip-active { @apply border-secondary! bg-secondary-soft! text-fg!; }
-  .chip-primary { @apply border-primary! bg-primary-soft! text-fg!; }
+  .chip.chip-active { @apply border-secondary bg-secondary-soft text-fg; }
+  .chip.chip-primary { @apply border-primary bg-primary-soft text-fg; }
 
   .tag { @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide leading-4; }
   .tag-muted { @apply bg-surface-3 text-fg-muted; }
@@ -257,7 +257,7 @@ audio { color-scheme: dark; }
   .alert-success { @apply bg-success-soft text-success; }
 
   .skeleton { @apply animate-pulse rounded-md bg-surface-3; }
-  .kbd { @apply rounded border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-fg-muted; }
+  .kbd { @apply rounded border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-fg-muted; }
 }
 
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }

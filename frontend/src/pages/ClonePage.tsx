@@ -7,24 +7,23 @@ import { Alert, Card, EmptyState, Field, LangBadge, PageHeader, ProgressBar, Seg
 
 const PREVIEW_LANGS: [string, string][] = [['vi', 'Việt'], ['en', 'English'], ['zh', 'Trung'], ['ja', 'Nhật'], ['ko', 'Hàn'], ['fr', 'Pháp'], ['de', 'Đức'], ['es', 'T. Ban Nha']]
 
-interface StatusFull extends CloneStatus {
-  torch: { installed: boolean; version: string | null; cuda: boolean; device_name: string | null }
-  models_ready: boolean
-}
-
 export default function ClonePage() {
-  const [status, setStatus] = useState<StatusFull | null>(null)
+  const [status, setStatus] = useState<CloneStatus | null>(null)
   const [profiles, setProfiles] = useState<VoiceProfile[] | null>(null)
   const installJob = useJobs(selectJobsByKind('clone_install'))[0]
   const installing = !!installJob && (installJob.status === 'running' || installJob.status === 'queued')
 
   const refresh = async () => {
-    const [s, p] = await Promise.all([api.cloneStatus() as Promise<StatusFull>, api.profiles()])
+    const [s, p] = await Promise.all([api.cloneStatus(), api.profiles()])
     setStatus(s)
     setProfiles(p)
   }
   useEffect(() => { refresh().catch((e) => toastError(e)) }, [])
-  useEffect(() => { if (installJob?.status === 'done') refresh().catch(() => undefined) }, [installJob?.status])
+  const prevInstall = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (prevInstall.current && prevInstall.current !== 'done' && installJob?.status === 'done') refresh().catch(() => undefined)
+    prevInstall.current = installJob?.status
+  }, [installJob?.status])
 
   return (
     <div className="mx-auto max-w-[1440px] p-6">
@@ -76,13 +75,22 @@ function NewProfile({ onCreated }: { onCreated: () => void }) {
   const [busy, setBusy] = useState(false)
   const [secs, setSecs] = useState(0)
   const recRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Unmount safety: stop recorder, release the microphone, clear the timer.
+  useEffect(() => () => {
+    if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop()
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    if (timerRef.current) window.clearInterval(timerRef.current)
+  }, [])
+
   const startRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      streamRef.current = stream
       const rec = new MediaRecorder(stream)
       chunksRef.current = []
       rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data) }
@@ -90,6 +98,7 @@ function NewProfile({ onCreated }: { onCreated: () => void }) {
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' })
         setFile(new File([blob], `ghi-am.${(rec.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'}`, { type: blob.type }))
         stream.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
       }
       rec.start()
       recRef.current = rec
@@ -147,14 +156,20 @@ function ProfileCard({ p, installed, onDeleted }: { p: VoiceProfile; installed: 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const jobFor = (lang: string): Job | undefined => previews.find((j) => j.params?.lang === lang)
 
+  useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null }, [])
   const play = async (url: string, key: string) => {
     audioRef.current?.pause()
     if (playing === key) { setPlaying(null); return }
     const a = new Audio(url)
     audioRef.current = a
     a.onended = () => setPlaying(null)
-    await a.play()
-    setPlaying(key)
+    try {
+      await a.play()
+      setPlaying(key)
+    } catch (e) {
+      setPlaying(null)
+      toastError(e, 'Không phát được audio')
+    }
   }
   const preview = async (lang: string) => {
     const j = jobFor(lang)

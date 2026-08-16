@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 import re
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import srt as srtlib
+from . import procs, srt as srtlib
 from .text import normalize
 
 log = logging.getLogger(__name__)
@@ -108,9 +107,13 @@ def _split_long(chapters: list[Chapter]) -> list[Chapter]:
 # ---- format readers ----------------------------------------------------------------
 def _read_text_file(path: Path) -> str:
     raw = path.read_bytes()
-    for enc in ("utf-8-sig", "utf-16"):
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):  # UTF-16 only when a BOM says so
         try:
-            return raw.decode(enc)
+            return raw.decode("utf-16")
         except UnicodeDecodeError:
             pass
     import chardet
@@ -196,9 +199,12 @@ def parse_pdf(path: Path) -> Book:
     import fitz  # pymupdf
 
     doc = fitz.open(str(path))
-    title = (doc.metadata or {}).get("title") or path.stem
-    pages = [p.get_text("text") for p in doc]
-    toc = doc.get_toc(simple=True)  # [level, title, page]
+    try:
+        title = (doc.metadata or {}).get("title") or path.stem
+        pages = [p.get_text("text") for p in doc]
+        toc = doc.get_toc(simple=True)  # [level, title, page]
+    finally:
+        doc.close()
     chapters: list[Chapter] = []
     if toc:
         entries = [(t, max(1, pg)) for lvl, t, pg in toc if lvl <= 2 and pg > 0]
@@ -253,7 +259,7 @@ def _convert_with_calibre(path: Path) -> Path:
     if not exe:
         raise ValueError("Định dạng này cần Calibre (ebook-convert) — hãy cài calibre.com hoặc chuyển sang EPUB.")
     out = Path(tempfile.mkdtemp()) / (path.stem + ".epub")
-    subprocess.run([str(exe), str(path), str(out)], check=True, capture_output=True)
+    procs.run_hidden([str(exe), str(path), str(out)], check=True)
     return out
 
 

@@ -8,10 +8,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import FRONTEND_DIST, settings
+from .config import FRONTEND_DIST
 from .jobs import jobs
 
 log = logging.getLogger("tts_studio")
@@ -31,6 +32,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="TTS Studio", version="0.1.0", lifespan=lifespan)
+    # Loopback-only API: reject foreign Host headers (DNS-rebinding) and cross-origin browsers.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -55,17 +58,21 @@ def create_app() -> FastAPI:
             log.warning("router %s failed to load: %s", mod_name, exc)
 
     if FRONTEND_DIST.exists():
+        dist_root = FRONTEND_DIST.resolve()
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
         @app.get("/{full_path:path}", include_in_schema=False)
         async def spa(full_path: str):  # noqa: ARG001
-            candidate = FRONTEND_DIST / full_path
-            if full_path and candidate.is_file():
-                return FileResponse(str(candidate))
-            return FileResponse(str(FRONTEND_DIST / "index.html"))
+            if full_path:
+                try:
+                    candidate = (dist_root / full_path).resolve()
+                except (OSError, ValueError):
+                    candidate = None
+                if candidate and candidate.is_relative_to(dist_root) and candidate.is_file():
+                    return FileResponse(str(candidate))
+            return FileResponse(str(dist_root / "index.html"))
 
     return app
 
 
 app = create_app()
-_ = settings  # ensure settings loaded at import

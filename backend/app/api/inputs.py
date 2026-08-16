@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from ..config import CACHE_DIR
 from ..services import parsers
@@ -41,7 +42,7 @@ async def parse_file(file: UploadFile = File(...)) -> dict[str, Any]:
         while chunk := await file.read(1 << 20):
             f.write(chunk)
     try:
-        book = parsers.parse_file(dest)
+        book = await run_in_threadpool(parsers.parse_file, dest)  # PDF/EPUB parsing is CPU-bound
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001

@@ -28,7 +28,13 @@ export const useJobs = create<JobsState>((set, get) => ({
   upsert: (job) => set((s) => ({ jobs: { ...s.jobs, [job.id]: job } })),
 
   remove: async (id) => {
-    await api.deleteJob(id)
+    try {
+      await api.deleteJob(id)
+    } catch (e) {
+      const { toastError } = await import('./ui')
+      toastError(e, 'Không xóa được job')
+      return
+    }
     set((s) => {
       const next = { ...s.jobs }
       delete next[id]
@@ -37,7 +43,12 @@ export const useJobs = create<JobsState>((set, get) => ({
   },
 
   cancel: async (id) => {
-    await api.cancelJob(id)
+    try {
+      await api.cancelJob(id)
+    } catch (e) {
+      const { toastError } = await import('./ui')
+      toastError(e, 'Không hủy được job')
+    }
   },
 
   connect: () => {
@@ -53,12 +64,14 @@ export const useJobs = create<JobsState>((set, get) => ({
         /* ignore */
       }
     }
+    const mine = socket
     socket.onclose = () => {
+      if (socket !== mine) return // a newer socket replaced this one
       set({ connected: false })
       if (retryTimer) window.clearTimeout(retryTimer)
       retryTimer = window.setTimeout(() => get().connect(), 1500)
     }
-    socket.onerror = () => socket?.close()
+    socket.onerror = () => mine.close()
   },
 }))
 

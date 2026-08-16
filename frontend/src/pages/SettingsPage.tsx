@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Cpu, Download, FolderOpen, Monitor, Moon, RefreshCw, Save, SlidersHorizontal, Sun } from 'lucide-react'
-import { api, type Settings, type SystemInfo } from '../lib/api'
+import { api, safeCall, type Settings, type SystemInfo } from '../lib/api'
 import { useJobs, selectJobsByKind } from '../store/jobs'
 import { toastError, toastOk, useUi } from '../store/ui'
 import { Alert, Card, Field, PageHeader, ProgressBar, Segmented, Skeleton } from '../components/ui'
@@ -21,7 +21,12 @@ export default function SettingsPage() {
     setDirty(false)
   }
   useEffect(() => { refresh().catch((e) => toastError(e)) }, [])
-  useEffect(() => { if (ffJob?.status === 'done') { refresh().catch(() => undefined); toastOk('FFmpeg đã sẵn sàng') } }, [ffJob?.status])
+  const prevFf = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    // react only to a live running→done transition, not to a historical job on mount
+    if (prevFf.current && prevFf.current !== 'done' && ffJob?.status === 'done') { refresh().catch(() => undefined); toastOk('FFmpeg đã sẵn sàng') }
+    prevFf.current = ffJob?.status
+  }, [ffJob?.status])
 
   const save = async () => {
     if (!settings) return
@@ -49,7 +54,7 @@ export default function SettingsPage() {
           <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-2.5 text-[13px]">
             <dt className="text-fg-muted">Nền tảng</dt><dd>{sys.platform} · Python {sys.python}</dd>
             <dt className="text-fg-muted">Thư mục dữ liệu</dt>
-            <dd className="flex items-center gap-2"><code className="truncate text-xs">{sys.data_dir}</code><button className="btn-icon btn-icon-sm" aria-label="Mở thư mục dữ liệu" onClick={() => api.openPath(sys.data_dir)}><FolderOpen size={14} /></button></dd>
+            <dd className="flex items-center gap-2"><code className="truncate text-xs">{sys.data_dir}</code><button className="btn-icon btn-icon-sm" aria-label="Mở thư mục dữ liệu" onClick={() => safeCall(api.openPath(sys.data_dir), 'Không mở được thư mục')}><FolderOpen size={14} /></button></dd>
             <dt className="text-fg-muted">GPU</dt>
             <dd>{sys.gpu.name ? <>{sys.gpu.name} · {sys.gpu.vram_mb} MB · <span className={sys.gpu.cuda ? 'text-success' : 'text-warning'}>{sys.gpu.cuda ? 'CUDA sẵn sàng' : 'CUDA chưa sẵn sàng (torch CPU hoặc chưa cài)'}</span></> : <span className="text-fg-muted">Không phát hiện GPU NVIDIA — chạy CPU</span>}</dd>
             <dt className="text-fg-muted">FFmpeg</dt>
@@ -74,7 +79,7 @@ export default function SettingsPage() {
             <Field label="Thư mục xuất file" className="md:col-span-2">
               <div className="flex gap-2">
                 <input className="input" value={settings.output_dir} onChange={(e) => set('output_dir', e.target.value)} />
-                <button className="btn-ghost" onClick={() => api.openPath(settings.output_dir)} aria-label="Mở thư mục xuất"><FolderOpen size={15} /></button>
+                <button className="btn-ghost" onClick={() => safeCall(api.openPath(settings.output_dir), 'Không mở được thư mục')} aria-label="Mở thư mục xuất"><FolderOpen size={15} /></button>
               </div>
             </Field>
             <Field label="TikTok sessionid (tùy chọn)" className="md:col-span-2" help={<>Đăng nhập tiktok.com trên trình duyệt → DevTools → Application → Cookies → copy <code>sessionid</code>. Cần để dùng giọng TikTok.</>}>

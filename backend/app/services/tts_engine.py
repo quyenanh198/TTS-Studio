@@ -98,9 +98,14 @@ def _provider_for(voice: str) -> str:
     return voices.provider_of(voice)
 
 
-def _synth_chunk(provider: str, text: str, voice: str, out: Path, req: TtsRequest) -> providers.SynthResult:
+def _synth_chunk(provider: str, text: str, voice: str, out: Path, req: TtsRequest,
+                 neutral: bool = False) -> providers.SynthResult:
+    """`neutral=True` synthesises at 1.0x / 0dB / 0st — used when effects are applied later by
+    ffmpeg (clone pipeline) so they are never applied twice."""
     if provider == "tiktok":
         return providers.synth_tiktok(text, voice, out, settings.get("tiktok_session_id", ""))
+    if neutral:
+        return providers.synth_edge(text, voice, out)
     # edge: native rate/volume/pitch (better quality than post-processing)
     return providers.synth_edge(text, voice, out, rate=req.rate, volume=req.volume,
                                 pitch_semitones=req.pitch if req.keep_pitch else 0.0)
@@ -146,7 +151,7 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
         for i, cue in enumerate(ch.cues):
             ctx.check_cancelled()
             raw = ch_dir / f"cue{i:05d}.mp3"
-            _synth_chunk(provider, cue.text, voice, raw, req)
+            _synth_chunk(provider, cue.text, voice, raw, req, neutral=clone_profile is not None)
             if clone_profile:
                 raw = _clone_convert(raw, clone_profile, ch_dir / f"cue{i:05d}_vc.wav")
             fitted = ch_dir / f"cue{i:05d}.wav"
@@ -177,7 +182,7 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
     for i, chunk in enumerate(chunks):
         ctx.check_cancelled()
         raw = ch_dir / f"c{i:05d}.mp3"
-        res = _synth_chunk(provider, chunk, voice, raw, req)
+        res = _synth_chunk(provider, chunk, voice, raw, req, neutral=clone_profile is not None)
         dur = ffmpeg.probe_duration(raw) or res.duration
         if res.words:
             aligned = srtlib.attach_punctuation(chunk, res.words)
@@ -195,7 +200,8 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
     wav = wav_raw
     if clone_profile:
         wav = _clone_convert(wav_raw, clone_profile, ch_dir / "chapter_vc.wav")
-    # Non-Edge providers get effects via ffmpeg (Edge already applied natively)
+    # Effects via ffmpeg for TikTok and for the clone pipeline (Edge was synthesised neutral in
+    # those cases). Plain Edge already applied rate/volume/pitch natively — do NOT apply twice.
     if provider != "edge" or clone_profile:
         eff = ch_dir / "chapter_fx.wav"
         audio.apply_effects(wav, eff, rate=req.rate, volume=req.volume, keep_pitch=req.keep_pitch,
@@ -237,6 +243,19 @@ def run_tts(ctx: JobContext, req: TtsRequest) -> dict[str, Any]:
                       else sum(len(x.text) for x in c.cues) for c in chapters)
     prog = Progress(ctx, total_units)
 
+    try:
+        return _run_tts_inner(ctx, req, chapters, out_dir, work, prog)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        try:  # remove out_dir if nothing was produced (error/cancel before export)
+            if out_dir.exists() and not any(out_dir.iterdir()):
+                out_dir.rmdir()
+        except OSError:
+            pass
+
+
+def _run_tts_inner(ctx: JobContext, req: TtsRequest, chapters: list[ChapterIn], out_dir: Path, work: Path,
+                   prog: Progress) -> dict[str, Any]:
     chapter_outs: list[ChapterOut] = []
     for i, ch in enumerate(chapters, 1):
         ctx.check_cancelled()
@@ -306,7 +325,6 @@ def run_tts(ctx: JobContext, req: TtsRequest) -> dict[str, Any]:
                 if o.srt:
                     z.write(o.srt, o.srt.name)
 
-    shutil.rmtree(work, ignore_errors=True)
     return {
         "out_dir": str(out_dir),
         "outputs": [o.to_dict() for o in outputs],

@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -15,7 +14,7 @@ from typing import Any, Callable
 
 from ..config import MODELS_DIR, settings
 from ..jobs import JobContext
-from . import audio, ffmpeg, srt as srtlib
+from . import audio, ffmpeg, procs, srt as srtlib
 from .srt import Cue, Segment, Word
 from .text import safe_filename
 
@@ -137,15 +136,24 @@ def gpu_support_installed() -> bool:
         return False
 
 
-def install_gpu_support(progress: Callable[[float, str], None] | None = None) -> None:
-    """pip install NVIDIA runtime wheels needed by ctranslate2 CUDA (~1GB)."""
+def install_gpu_support(progress: Callable[[float, str], None] | None = None,
+                        should_cancel: Callable[[], bool] | None = None) -> None:
+    """pip install NVIDIA runtime wheels needed by ctranslate2 CUDA (~1GB). Cancellable, streams progress."""
     if progress:
-        progress(0.1, "Đang cài nvidia-cublas-cu12, nvidia-cudnn-cu12 (~1GB)…")
-    subprocess.run([sys.executable, "-m", "ensurepip", "--upgrade"], capture_output=True)
-    cmd = [sys.executable, "-m", "pip", "install", "--quiet", "--break-system-packages", "nvidia-cublas-cu12", "nvidia-cudnn-cu12"]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Cài đặt thất bại: {proc.stderr[-1500:]}")
+        progress(0.05, "Đang cài nvidia-cublas-cu12, nvidia-cudnn-cu12 (~1GB)…")
+    procs.run_hidden([sys.executable, "-m", "ensurepip", "--upgrade"])
+    n = {"i": 0}
+
+    def on_line(line: str) -> None:
+        n["i"] += 1
+        if progress and any(k in line for k in ("Collecting", "Downloading", "Installing", "Successfully")):
+            progress(min(0.95, 0.05 + n["i"] / 40.0), line.strip()[:90])
+
+    code, tail = procs.run_streaming([sys.executable, "-m", "pip", "install", "--break-system-packages",
+                                      "--progress-bar", "off", "nvidia-cublas-cu12", "nvidia-cudnn-cu12"],
+                                     on_line=on_line, should_cancel=should_cancel)
+    if code != 0:
+        raise RuntimeError(f"Cài đặt thất bại: {tail[-1500:]}")
     if progress:
         progress(1.0, "Đã cài. Khởi động lại ứng dụng để dùng GPU.")
 
@@ -176,16 +184,17 @@ def demucs_available() -> bool:
         return False
 
 
-def separate_vocals(wav: Path, work: Path, progress: Callable[[float, str], None] | None = None) -> Path:
+def separate_vocals(wav: Path, work: Path, progress: Callable[[float, str], None] | None = None,
+                    should_cancel: Callable[[], bool] | None = None) -> Path:
     if not demucs_available():
         raise RuntimeError("Chưa cài demucs (pip install demucs). Bỏ chọn 'Tách giọng hát' hoặc cài thêm.")
     if progress:
         progress(0.15, "Đang tách giọng hát khỏi nhạc nền (demucs)…")
     out_root = work / "demucs"
     cmd = [sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs", "-o", str(out_root), str(wav)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"demucs lỗi: {proc.stderr[-1500:]}")
+    code, tail = procs.run_streaming(cmd, should_cancel=should_cancel)
+    if code != 0:
+        raise RuntimeError(f"demucs lỗi: {tail[-1500:]}")
     vocals = next(out_root.rglob("vocals.wav"), None)
     if not vocals:
         raise RuntimeError("demucs không tạo được vocals.wav")
@@ -208,11 +217,26 @@ def transcribe(ctx: JobContext, media: Path, model: str = "small", language: str
     work = out_dir / ".work"
     work.mkdir(parents=True, exist_ok=True)
 
+    try:
+        return _transcribe_inner(ctx, media, model, language, device, word_timestamps, separate, formats,
+                                 initial_prompt, out_dir, work)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        try:
+            if out_dir.exists() and not any(out_dir.iterdir()):
+                out_dir.rmdir()
+        except OSError:
+            pass
+
+
+def _transcribe_inner(ctx: JobContext, media: Path, model: str, language: str | None, device: str,
+                      word_timestamps: bool, separate: bool, formats: list[str], initial_prompt: str | None,
+                      out_dir: Path, work: Path) -> dict[str, Any]:
     ctx.progress(0.03, "Đang giải mã audio…")
     wav = audio.to_wav_mono(media, work / "audio16k.wav", 16000)
     duration = ffmpeg.probe_duration(wav) or 0.0
     if separate:
-        wav = separate_vocals(wav, work, ctx.progress)
+        wav = separate_vocals(wav, work, ctx.progress, should_cancel=lambda: ctx.cancelled)
 
     ctx.progress(0.2, f"Đang nạp model {model}…")
     whisper, dev = get_model(model, device)
@@ -251,7 +275,6 @@ def transcribe(ctx: JobContext, media: Path, model: str = "small", language: str
     (out_dir / f"{stem}.json").write_text(
         json.dumps({"language": info.language, "duration": duration, "cues": [c.to_dict() for c in cues]},
                    ensure_ascii=False, indent=1), encoding="utf-8")
-    shutil.rmtree(work, ignore_errors=True)
     return {
         "out_dir": str(out_dir),
         "outputs": outputs,

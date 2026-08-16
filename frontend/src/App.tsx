@@ -113,12 +113,14 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Pages stay mounted (hidden) so in-progress work — parsed books, edited cues, a mic
+          recording — survives navigation. Each page receives `active` for page-scoped shortcuts. */}
       <main className="min-w-0 flex-1 overflow-auto bg-bg" id="main">
-        {page === 'tts' && <TtsPage />}
-        {page === 'transcript' && <TranscriptPage />}
-        {page === 'clone' && <ClonePage />}
-        {page === 'history' && <HistoryPage />}
-        {page === 'settings' && <SettingsPage />}
+        <div hidden={page !== 'tts'}><TtsPage active={page === 'tts'} /></div>
+        <div hidden={page !== 'transcript'}><TranscriptPage /></div>
+        <div hidden={page !== 'clone'}><ClonePage /></div>
+        <div hidden={page !== 'history'}><HistoryPage /></div>
+        <div hidden={page !== 'settings'}><SettingsPage /></div>
       </main>
       <ToastHost />
     </div>

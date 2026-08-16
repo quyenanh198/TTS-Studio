@@ -11,6 +11,7 @@ _SENT_RE = re.compile(rf"(.+?{_SENT_END})(\s+|$)|(.+?)(\n+|$)", re.S)
 _WS_RE = re.compile(r"[ \t ]+")
 _MULTI_NL = re.compile(r"\n{3,}")
 
+_WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 MAX_CHUNK_CHARS = 2500  # Edge handles long input, but shorter chunks = better progress + retry.
 TIKTOK_MAX_CHARS = 280
 
@@ -87,4 +88,7 @@ def safe_filename(name: str, max_len: int = 80) -> str:
     name = unicodedata.normalize("NFC", name or "").strip()
     name = re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", " ", name)
     name = re.sub(r"\s+", " ", name).strip(" .")
-    return (name[:max_len] or "untitled").rstrip(" .")
+    name = (name[:max_len] or "untitled").rstrip(" .")
+    if name.split(".")[0].upper() in _WIN_RESERVED:  # CON, NUL, COM1… are invalid on Windows
+        name = f"_{name}"
+    return name

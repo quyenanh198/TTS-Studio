@@ -6,6 +6,7 @@ Windows: downloads gyan.dev release-essentials build (ffmpeg + ffprobe) on deman
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -73,6 +74,7 @@ def run(args: Sequence[str], check: bool = True, capture: bool = True) -> subpro
         cmd,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
+        stdin=subprocess.DEVNULL,
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -81,6 +83,22 @@ def run(args: Sequence[str], check: bool = True, capture: bool = True) -> subpro
     if check and proc.returncode != 0:
         raise RuntimeError(f"ffmpeg lỗi ({proc.returncode}): {proc.stderr.strip()[-2000:]}")
     return proc
+
+
+def probe_sample_rate(path: str | Path) -> int | None:
+    """Sample rate of the first audio stream (None if unknown)."""
+    exe = ffprobe_path()
+    if not exe:
+        return None
+    proc = subprocess.run(
+        [exe, "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate", "-of",
+         "default=noprint_wrappers=1:nokey=1", str(path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, **_no_window_kwargs(),
+    )
+    try:
+        return int(proc.stdout.strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
 
 
 def probe_duration(path: str | Path) -> float:
@@ -108,32 +126,56 @@ def probe_duration(path: str | Path) -> float:
     return int(h) * 3600 + int(mi) * 60 + float(s)
 
 
-def download(progress: Callable[[float, str], None] | None = None) -> str:
-    """Download and unpack FFmpeg into FFMPEG_DIR. Returns ffmpeg exe path."""
+def download(progress: Callable[[float, str], None] | None = None,
+             should_cancel: Callable[[], bool] | None = None) -> str:
+    """Download, verify (SHA-256 published next to the archive) and unpack FFmpeg into FFMPEG_DIR."""
     if sys.platform != "win32":
         raise RuntimeError("Tự động tải FFmpeg chỉ hỗ trợ Windows. Hãy cài ffmpeg qua package manager.")
     FFMPEG_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = FFMPEG_DIR / "ffmpeg.zip"
+    expected = ""
+    try:
+        r = httpx.get(FFMPEG_ZIP_URL + ".sha256", follow_redirects=True, timeout=30)
+        if r.status_code == 200:
+            expected = r.text.strip().split()[0].lower()
+    except Exception:  # noqa: BLE001 — verification is best-effort if the digest is unreachable
+        expected = ""
+    h = hashlib.sha256()
     with httpx.stream("GET", FFMPEG_ZIP_URL, follow_redirects=True, timeout=120) as r:
         r.raise_for_status()
         total = int(r.headers.get("content-length") or 0)
         done = 0
         with open(zip_path, "wb") as f:
             for chunk in r.iter_bytes(1 << 16):
+                if should_cancel and should_cancel():
+                    zip_path.unlink(missing_ok=True)
+                    raise RuntimeError("cancelled")
                 f.write(chunk)
+                h.update(chunk)
                 done += len(chunk)
                 if progress and total:
                     progress(done / total * 0.9,
                              f"Đang tải FFmpeg {done // (1 << 20)}MB/{total // (1 << 20)}MB")
+    if expected and h.hexdigest() != expected:
+        zip_path.unlink(missing_ok=True)
+        raise RuntimeError("Tải FFmpeg thất bại: mã băm SHA-256 không khớp (file có thể bị hỏng/giả mạo)")
     if progress:
-        progress(0.92, "Đang giải nén FFmpeg")
+        progress(0.92, "Đang giải nén FFmpeg" + ("" if expected else " (không kiểm được checksum)"))
+    found: set[str] = set()
     with zipfile.ZipFile(zip_path) as z:
         for member in z.namelist():
             base = os.path.basename(member)
             if base in ("ffmpeg.exe", "ffprobe.exe"):
-                with z.open(member) as src, open(FFMPEG_DIR / base, "wb") as dst:
+                with z.open(member) as src, open(FFMPEG_DIR / (base + ".tmp"), "wb") as dst:
                     shutil.copyfileobj(src, dst)
+                found.add(base)
     zip_path.unlink(missing_ok=True)
+    if found != {"ffmpeg.exe", "ffprobe.exe"}:
+        for name in found:
+            (FFMPEG_DIR / (name + ".tmp")).unlink(missing_ok=True)
+        raise RuntimeError("Gói FFmpeg thiếu ffmpeg.exe/ffprobe.exe")
+    for name in found:  # swap in only after both extracted
+        os.replace(FFMPEG_DIR / (name + ".tmp"), FFMPEG_DIR / name)
     if progress:
         progress(1.0, "FFmpeg sẵn sàng")
     exe = ffmpeg_path()

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { cloneElement, isValidElement, useId, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, Info, Mic, User, X, XCircle } from 'lucide-react'
 import type { JobStatus } from '../lib/api'
 import { useUi, type ToastKind } from '../store/ui'
@@ -32,23 +32,44 @@ export function Card({ title, icon, right, children, className = '' }: { title?:
 }
 
 export function Field({ label, help, children, className = '' }: { label: string; help?: ReactNode; children: ReactNode; className?: string }) {
+  const id = useId()
+  const helpId = `${id}-help`
+  // Wire label ↔ control when the child is a single native form element; compound children
+  // (input + button rows) keep their own aria-label.
+  let content: ReactNode = children
+  if (isValidElement(children) && typeof children.type === 'string' && ['input', 'select', 'textarea'].includes(children.type)) {
+    const el = children as ReactElement<Record<string, unknown>>
+    content = cloneElement(el, { id: el.props.id ?? id, 'aria-describedby': help ? helpId : el.props['aria-describedby'] })
+  }
   return (
     <div className={className}>
-      <label className="label">{label}</label>
-      {children}
-      {help && <p className="help">{help}</p>}
+      <label className="label" htmlFor={id}>{label}</label>
+      {content}
+      {help && <p className="help" id={helpId}>{help}</p>}
     </div>
   )
 }
 
 export function Segmented<T extends string>({ value, onChange, options, ariaLabel }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; ariaLabel: string }) {
+  // Single-select → radiogroup semantics with roving tabindex; arrow keys move selection.
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+    e.preventDefault()
+    const n = options.length
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : (idx + (e.key === 'ArrowRight' ? 1 : n - 1)) % n
+    onChange(options[next].value)
+    ;(e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
+  }
   return (
-    <div className="segmented" role="group" aria-label={ariaLabel}>
-      {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
-          {o.label}
-        </button>
-      ))}
+    <div className="segmented" role="radiogroup" aria-label={ariaLabel}>
+      {options.map((o, i) => {
+        const selected = value === o.value
+        return (
+          <button key={o.value} type="button" role="radio" aria-checked={selected} aria-pressed={selected} tabIndex={selected ? 0 : -1} onKeyDown={(e) => onKey(e, i)} onClick={() => onChange(o.value)}>
+            {o.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -58,7 +79,7 @@ export function ProgressBar({ value, label, status }: { value: number; label?: s
   const pct = Math.round((value ?? 0) * 100)
   const color = status === 'error' ? 'bg-danger' : status === 'cancelled' ? 'bg-fg-subtle' : status === 'done' ? 'bg-success' : 'bg-primary'
   return (
-    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={label}>
+    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={label || 'Tiến độ'}>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
         <div className={`h-full ${color} transition-[width] duration-300`} style={{ width: `${pct}%` }} />
       </div>
@@ -80,7 +101,7 @@ export function StatusTag({ status }: { status: JobStatus }) {
     error: ['Lỗi', 'tag-danger'],
     cancelled: ['Đã hủy', 'tag-muted'],
   }
-  const [label, cls] = map[status]
+  const [label, cls] = map[status] ?? [String(status), 'tag-muted']
   return <span className={`tag ${cls}`}>{label}</span>
 }
 
@@ -112,14 +133,14 @@ export function Skeleton({ className = '' }: { className?: string }) {
 export function ToastHost() {
   const toasts = useUi((s) => s.toasts)
   const dismiss = useUi((s) => s.dismiss)
-  if (!toasts.length) return null
+  // Live region stays mounted so assistive tech announces toasts inserted later.
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite" aria-relevant="additions">
       {toasts.map((t) => {
         const Icon = t.kind === 'danger' ? XCircle : t.kind === 'warning' ? AlertTriangle : t.kind === 'success' ? CheckCircle2 : Info
         const color = t.kind === 'danger' ? 'text-danger' : t.kind === 'warning' ? 'text-warning' : t.kind === 'success' ? 'text-success' : 'text-info'
         return (
-          <div key={t.id} className="toast-enter pointer-events-auto flex items-start gap-2.5 rounded-[var(--radius-md)] border border-line bg-surface p-3 shadow-[var(--shadow-md)]">
+          <div key={t.id} role={t.kind === 'danger' ? 'alert' : 'status'} className="toast-enter pointer-events-auto flex items-start gap-2.5 rounded-[var(--radius-md)] border border-line bg-surface p-3 shadow-[var(--shadow-md)]">
             <Icon size={16} className={`mt-0.5 shrink-0 ${color}`} />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">{t.title}</div>

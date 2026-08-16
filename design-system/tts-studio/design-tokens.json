@@ -12,7 +12,7 @@
       "navy": { "950": "#0b0c1c", "900": "#0f1024", "850": "#14162c", "800": "#191b34", "700": "#22254a", "600": "#2c3060" },
       "slate": { "50": "#f6f7fb", "100": "#eceef5", "200": "#dde0ea", "300": "#c3c8d6", "400": "#9aa3b8", "450": "#7b8499", "500": "#6b748a", "550": "#5b6478", "700": "#3b4257", "900": "#161a2b" },
       "indigo": { "300": "#a5b4fc", "400": "#818cf8", "500": "#6366f1", "600": "#4f46e5" },
-      "orange": { "400": "#fb923c", "500": "#f97316", "600": "#ea580c", "700": "#c2410c", "800": "#9a3412" },
+      "orange": { "400": "#fb923c", "500": "#f97316", "600": "#ea580c", "700": "#c2410c", "750": "#b03a0b", "800": "#9a3412" },
       "green": { "500": "#22c55e", "700": "#15803d" },
       "amber": { "500": "#f59e0b", "700": "#b45309" },
       "red": { "500": "#ef4444", "600": "#dc2626" },
@@ -36,16 +36,16 @@
       "primary": "{orange.500}", "primary-hover": "{orange.400}", "primary-active": "{orange.600}", "primary-fg": "#1a0f05", "primary-soft": "rgba(249,115,22,0.14)",
       "secondary": "{indigo.500}", "secondary-soft": "rgba(99,102,241,0.16)", "secondary-fg": "{indigo.300}",
       "ring": "{indigo.400}",
-      "success": "{green.500}", "warning": "{amber.500}", "danger": "{red.500}", "info": "{cyan.400}"
+      "success": "#4ade80", "warning": "#fbbf24", "danger": "#f87171", "info": "{cyan.400}"
     },
     "light": {
       "bg": "{slate.50}", "bg-sunken": "{slate.100}", "surface": "{white}", "surface-2": "{slate.100}", "surface-3": "{slate.200}",
       "line": "{slate.200}", "line-strong": "{slate.300}",
       "fg": "{slate.900}", "fg-muted": "{slate.550}", "fg-subtle": "{slate.500}",
-      "primary": "{orange.700}", "primary-hover": "{orange.600}", "primary-active": "{orange.800}", "primary-fg": "{white}", "primary-soft": "rgba(194,65,12,0.12)",
+      "primary": "{orange.700}", "primary-hover": "{orange.750}", "primary-active": "{orange.800}", "primary-fg": "{white}", "primary-soft": "rgba(194,65,12,0.08)",
       "secondary": "{indigo.600}", "secondary-soft": "rgba(79,70,229,0.12)", "secondary-fg": "{indigo.600}",
       "ring": "{indigo.500}",
-      "success": "{green.700}", "warning": "{amber.700}", "danger": "{red.600}", "info": "{cyan.700}"
+      "success": "#166534", "warning": "#92400e", "danger": "#b91c1c", "info": "{cyan.700}"
     }
   },
   "component": {
@@ -57,8 +57,8 @@
     "toast": { "width": "360px", "ttl-ms": 4000, "ttl-danger-ms": 8000 }
   },
   "contrast": {
-    "note": "Measured in-app (WCAG 2.x). All text pairs >= 4.5:1 in both themes.",
-    "dark": { "fg/surface": 16.0, "fg-muted/surface": 7.0, "fg-subtle/surface": 4.7, "primary-fg/primary": 6.7, "secondary-fg/surface": 8.9, "danger/surface": 4.7 },
-    "light": { "fg/surface": 17.3, "fg-muted/surface-2": 5.1, "fg-subtle/surface": 4.7, "primary-fg/primary": 5.2, "secondary-fg/surface": 6.3 }
+    "note": "Measured on rendered elements in-app (WCAG 2.x), including text on *-soft backgrounds, hover states and active chips. All pairs >= 4.5:1 in both themes.",
+    "dark": { "fg/surface": 16.0, "fg-muted/surface": 7.0, "fg-subtle/surface": 4.7, "primary-fg/primary": 6.7, "primary-fg/primary-hover": 8.3, "secondary-fg/surface": 8.9, "danger/danger-soft": 5.5, "warning/warning-soft": 8.4, "success/success-soft": 8.1, "info/info-soft": 7.8, "primary/primary-soft": 5.3 },
+    "light": { "fg/surface": 17.3, "fg-muted/surface-2": 5.1, "fg-subtle/surface": 4.7, "primary-fg/primary": 5.2, "primary-fg/primary-hover": 6.1, "secondary-fg/secondary-soft": 5.3, "danger/danger-soft": 5.5, "warning/warning-soft": 6.1, "success/success-soft": 6.1, "info/info-soft": 4.7, "primary/primary-soft": 4.9 }
   }
 }
