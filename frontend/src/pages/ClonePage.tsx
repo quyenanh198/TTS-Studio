@@ -8,6 +8,15 @@ import { Alert, Card, EmptyState, Field, LangBadge, PageHeader, ProgressBar, Seg
 const PREVIEW_LANGS: [string, string][] = [['vi', 'Việt'], ['en', 'English'], ['zh', 'Trung'], ['ja', 'Nhật'], ['ko', 'Hàn'], ['fr', 'Pháp'], ['de', 'Đức'], ['es', 'T. Ban Nha']]
 const EMOTIONS: [string, string][] = [['neutral', 'Kể chuyện'], ['sad', 'Buồn'], ['happy', 'Vui'], ['angry', 'Giận'], ['fear', 'Sợ / hồi hộp'], ['calm', 'Nhẹ nhàng']]
 const emotionLabel = (id: string) => EMOTIONS.find(([e]) => e === id)?.[1] ?? id
+/** Suggested lines to read when recording a sample — F5 needs the exact transcript of the clip. */
+const SCRIPTS: Record<string, string> = {
+  neutral: 'Xin chào, tôi là người kể chuyện của bạn. Hôm nay chúng ta sẽ cùng nhau bước vào một câu chuyện mới, và tôi hy vọng bạn sẽ thích nó.',
+  sad: 'Tôi đứng lặng nhìn theo bóng người khuất dần cuối con đường, lòng nặng trĩu một nỗi buồn không tên.',
+  happy: 'Tuyệt vời quá! Cuối cùng chúng ta cũng làm được rồi, tôi vui không thể tả nổi!',
+  angry: 'Đủ rồi! Tôi không thể chịu đựng thêm một lời dối trá nào nữa, đừng nói thêm gì cả!',
+  fear: 'Có tiếng bước chân sau lưng... tôi nín thở, tim đập thình thịch trong bóng tối.',
+  calm: 'Nhẹ nhàng thôi, hít một hơi thật sâu, mọi chuyện rồi sẽ ổn cả, tôi hứa với bạn.',
+}
 type Engine = 'seedvc' | 'f5vi'
 
 export default function ClonePage() {
@@ -24,6 +33,7 @@ export default function ClonePage() {
     setStatus(s)
     setF5(f)
     setProfiles(p)
+    window.dispatchEvent(new Event('profiles-changed')) // VoicePicker on the TTS page refreshes its clone list
   }
   useEffect(() => { refresh().catch((e) => toastError(e)) }, [])
   const prevInstall = useRef<string | undefined>(undefined)
@@ -197,10 +207,17 @@ function NewProfile({ onCreated }: { onCreated: () => void }) {
           </Field>
         </div>
         <Field label={engine === 'f5vi' ? 'Mẫu giọng kể chuyện (3–12 giây)' : 'Mẫu giọng (10–25 giây)'} help={engine === 'f5vi' ? 'Nói tiếng Việt rõ ràng, giọng trung tính. Mẫu dài sẽ tự cắt còn 12 giây.' : 'Một người nói, không nhạc nền. File dài sẽ tự cắt còn 25 giây đầu.'}>
+          {engine === 'f5vi' && (
+            <div className="subcard mb-2 text-xs leading-relaxed">
+              <span className="text-fg-muted">Bấm Ghi âm và đọc câu này:</span>
+              <div className="mt-1 font-medium text-fg">“{SCRIPTS.neutral}”</div>
+              <button className="chip mt-1.5" onClick={() => setRefText(SCRIPTS.neutral)}>Dùng câu này làm lời thoại</button>
+            </div>
+          )}
           <AudioInput a={audio} maxSecs={engine === 'f5vi' ? 12 : 25} />
         </Field>
         {engine === 'f5vi' && (
-          <Field label="Lời thoại trong mẫu" help="Để trống để tự nhận dạng bằng Whisper (cần model đã tải ở trang Phụ đề).">
+          <Field label="Lời thoại trong mẫu (nên nhập chính xác)" help="F5-TTS cần đúng lời của đoạn ghi âm. Nếu tải file của riêng bạn, hãy gõ lại lời; để trống thì app tự nhận dạng bằng Whisper (tải ~460 MB lần đầu, có thể sai vài từ).">
             <textarea className="input min-h-[64px]" placeholder="vd: xin chào, hôm nay tôi sẽ kể cho các bạn nghe một câu chuyện." value={refText} onChange={(e) => setRefText(e.target.value)} />
           </Field>
         )}
@@ -339,10 +356,15 @@ function SampleManager({ p, onChanged, onPlay, playing }: { p: VoiceProfile; onC
           <Field label="Cảm xúc">
             <select className="input" value={emotion} onChange={(e) => setEmotion(e.target.value)} aria-label="Cảm xúc">{EMOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
           </Field>
-          <Field label="Mẫu 3–12 giây" help="Đọc một câu đúng cảm xúc đó (buồn thì chậm, trầm; giận thì gằn, mạnh…). Câu ngắn, rõ, không nhạc nền.">
+          <Field label="Mẫu 3–12 giây" help="Đọc đúng cảm xúc đó (buồn thì chậm, trầm; giận thì gằn, mạnh…). Câu ngắn, rõ, không nhạc nền.">
+            <div className="subcard mb-2 text-xs leading-relaxed">
+              <span className="text-fg-muted">Gợi ý câu để đọc ({emotionLabel(emotion)}):</span>
+              <div className="mt-1 font-medium text-fg">“{SCRIPTS[emotion]}”</div>
+              <button className="chip mt-1.5" onClick={() => setText(SCRIPTS[emotion])}>Dùng câu này làm lời thoại</button>
+            </div>
             <AudioInput a={audio} maxSecs={12} />
           </Field>
-          <Field label="Lời thoại trong mẫu" help="Để trống để tự nhận dạng.">
+          <Field label="Lời thoại trong mẫu (nên nhập chính xác)" help="Để trống thì app tự nhận dạng bằng Whisper.">
             <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="vd: sao lại thế này, tôi không tin nổi nữa..." />
           </Field>
           <div className="flex gap-2">

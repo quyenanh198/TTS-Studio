@@ -122,7 +122,17 @@ def install(progress: Callable[[float, str], None] | None = None,
             progress(0.62, "Đang cài f5-tts…")
         clone._pip(["f5-tts==1.1.22"], progress, 0.62, 0.18, "Cài f5-tts", should_cancel)  # noqa: SLF001
     if not models_ready():
-        download((lambda v, m="": progress(0.8 + 0.2 * v, m)) if progress else None)
+        download((lambda v, m="": progress(0.8 + 0.16 * v, m)) if progress else None)
+    # Whisper for auto-transcribing reference/emotion samples (ref_text is mandatory for F5).
+    if _asr_model_name() is None:
+        from . import asr
+
+        if progress:
+            progress(0.96, f"Đang tải Whisper {ASR_FALLBACK_MODEL} để nhận dạng lời mẫu…")
+        try:
+            asr.download_model(ASR_FALLBACK_MODEL, (lambda v, m="": progress(0.96 + 0.04 * v, m)) if progress else None)
+        except Exception as exc:  # noqa: BLE001 — optional: user can still type the ref text
+            log.warning("whisper %s download failed: %s", ASR_FALLBACK_MODEL, exc)
     if progress:
         progress(1.0, "F5-TTS Việt sẵn sàng")
 
@@ -213,16 +223,30 @@ def _save_samples(pid: str, items: list[dict[str, Any]]) -> None:
     _samples_file(pid).write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+ASR_FALLBACK_MODEL = "small"  # ~460 MB; decent Vietnamese for short, clean reference clips
+
+
+def _asr_model_name() -> str | None:
+    """Preferred downloaded Whisper model: the user's setting if present, else the largest downloaded."""
+    from . import asr
+
+    pref = settings.get("asr_model", ASR_FALLBACK_MODEL)
+    if asr.is_downloaded(pref):
+        return pref
+    return next((m["name"] for m in reversed(asr.MODELS) if asr.is_downloaded(m["name"])), None)
+
+
 def transcribe_ref(wav: Path) -> str:
-    """Reference text via faster-whisper (best downloaded model). Empty if none available."""
+    """Reference text via faster-whisper. Downloads `small` on first use if no model exists.
+    Empty string if transcription is impossible (caller asks the user to type the text)."""
     try:
         from . import asr
 
-        pref = settings.get("asr_model", "small")
-        name = pref if asr.is_downloaded(pref) else next((m["name"] for m in reversed(asr.MODELS)
-                                                            if asr.is_downloaded(m["name"])), None)
+        name = _asr_model_name()
         if not name:
-            return ""
+            log.info("no whisper model — downloading %s for ref transcription", ASR_FALLBACK_MODEL)
+            asr.download_model(ASR_FALLBACK_MODEL)
+            name = ASR_FALLBACK_MODEL
         model, _dev = asr.get_model(name, settings.get("asr_device", "auto"))
         segs, _info = model.transcribe(str(wav), language="vi", beam_size=5, vad_filter=True)
         return " ".join(s.text.strip() for s in segs).strip()
@@ -247,7 +271,8 @@ def add_sample(pid: str, emotion: str, upload: Path, text: str | None = None) ->
         raise RuntimeError("Mẫu quá ngắn (cần 3–12 giây)")
     ref_text = (text or "").strip() or transcribe_ref(wav)
     if not ref_text:
-        raise RuntimeError("Không nhận dạng được lời của mẫu — hãy nhập lời thoại thủ công hoặc tải model Whisper.")
+        raise RuntimeError("Không nhận dạng được lời của mẫu — hãy nhập chính xác lời thoại trong mẫu vào ô "
+                           "'Lời thoại' (khuyến nghị), hoặc kiểm tra mạng để app tải model Whisper.")
     items = [s for s in list_samples(pid) if s["emotion"] != emotion]
     item = {"emotion": emotion, "wav": str(wav), "text": ref_text, "duration": round(dur, 2)}
     items.append(item)

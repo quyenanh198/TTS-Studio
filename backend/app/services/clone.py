@@ -8,6 +8,7 @@ VC works on audio, not text, so a single reference clip works for every language
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 import uuid
@@ -247,8 +248,6 @@ def _verify_cache() -> list[str]:
     """Hugging Face cache uses symlinks snapshots/ → blobs/. A copy made without symlink support (or an
     interrupted download) leaves dangling links / pseudo-symlink files that fail with EINVAL/ENOENT at
     open time. Remove any repo whose snapshot files can't actually be read; HF re-downloads on demand."""
-    import shutil
-
     removed: list[str] = []
     for repo in SEEDVC_MODELS_DIR.glob("models--*"):
         snaps = repo / "snapshots"
@@ -266,9 +265,56 @@ def _verify_cache() -> list[str]:
                 break
         if broken:
             log.warning("seed-vc cache repo %s is corrupt — removing for re-download", repo.name)
-            shutil.rmtree(repo, ignore_errors=True)
+            _discard_dir(repo)
             removed.append(repo.name)
+    # Old snapshots left behind by an earlier version (symlink layout) — never used, best-effort cleanup.
+    for junk in SEEDVC_MODELS_DIR.glob("*.broken-*"):
+        _rmtree_relative(junk)
     return removed
+
+
+def _discard_dir(path: Path) -> None:
+    """Get a broken HF repo dir out of the way. Broken symlinks on some Windows setups cannot even be
+    deleted through absolute paths (WinError 448 / ENOENT / EINVAL), but renaming the *directory* works,
+    so: rename aside first (HF then re-downloads into a fresh dir), then try to delete via relative paths."""
+    import time
+
+    aside = path.with_name(f"{path.name}.broken-{int(time.time())}")
+    try:
+        os.rename(path, aside)
+    except OSError as exc:
+        log.warning("cannot rename %s: %s", path, exc)
+        aside = path
+    _rmtree_relative(aside)
+
+
+def _rmtree_relative(root: Path) -> None:
+    """rmtree that unlinks entries by *relative* name from inside their directory (works for symlinks
+    that fail through absolute paths). Best-effort; leaves whatever cannot be removed."""
+    import shutil
+
+    cwd = os.getcwd()
+    try:
+        for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+            try:
+                os.chdir(dirpath)
+                for n in filenames + dirnames:
+                    try:
+                        if os.path.isdir(n) and not os.path.islink(n):
+                            os.rmdir(n)
+                        else:
+                            os.unlink(n)
+                    except OSError:
+                        pass
+            except OSError:
+                pass
+        os.chdir(cwd)
+        shutil.rmtree(root, ignore_errors=True)
+    finally:
+        try:
+            os.chdir(cwd)
+        except OSError:
+            pass
 
 
 def _get_wrapper(device: str):

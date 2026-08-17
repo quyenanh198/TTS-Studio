@@ -36,21 +36,40 @@ export default function VoicePicker({ value, onChange, compact = false }: { valu
   const reqRef = useRef(0) // request token: ignore stale preview responses
   const listRef = useRef<HTMLDivElement>(null)
 
+  const [profilesLoaded, setProfilesLoaded] = useState(false)
+  const loadProfiles = useCallback(() => {
+    api.profiles().then((p) => { setProfiles(p); setProfilesLoaded(true) }).catch(() => setProfiles([]))
+  }, [])
   const load = useCallback(() => {
     setLoadErr(false)
     setVoices(null)
     api.voices().then(setVoices).catch((e) => { setVoices([]); setLoadErr(true); toastError(e, 'Không tải được danh sách giọng') })
-    api.profiles().then(setProfiles).catch(() => setProfiles([]))
-  }, [])
+    loadProfiles()
+  }, [loadProfiles])
   useEffect(() => {
     load()
     return () => { audioRef.current?.pause(); audioRef.current = null }
   }, [load])
+  // Clone profiles change on another page (create/delete) → keep the list fresh so a stale
+  // `clone:<id>` can't be submitted ("Voice profile không tồn tại").
+  useEffect(() => {
+    window.addEventListener('profiles-changed', loadProfiles)
+    window.addEventListener('focus', loadProfiles)
+    return () => { window.removeEventListener('profiles-changed', loadProfiles); window.removeEventListener('focus', loadProfiles) }
+  }, [loadProfiles])
 
   const all: Voice[] = useMemo(() => {
     const cloneVoices: Voice[] = profiles.map((p) => ({ id: `clone:${p.id}`, name: p.name, provider: 'clone', locale: p.language, lang: p.language, gender: p.gender, hot: false, engine: p.engine }))
     return [...cloneVoices, ...(voices ?? [])]
   }, [voices, profiles])
+
+  // Selected clone profile was deleted → fall back to the newest remaining profile, else default Edge voice.
+  useEffect(() => {
+    if (!profilesLoaded || !value.startsWith('clone:')) return
+    if (profiles.some((p) => `clone:${p.id}` === value)) return
+    const next = profiles[0] ? all.find((v) => v.id === `clone:${profiles[0].id}`) ?? null : (voices ?? []).find((v) => v.id === 'vi-VN-HoaiMyNeural') ?? (voices ?? [])[0] ?? null
+    if (next) onChange(next.id, next)
+  }, [profilesLoaded, profiles, value, all, voices, onChange])
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
