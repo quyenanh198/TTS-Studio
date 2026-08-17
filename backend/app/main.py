@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="TTS Studio", version="1.0.1", lifespan=lifespan)
+    app = FastAPI(title="TTS Studio", version="1.1.0", lifespan=lifespan)
     # Loopback-only API: reject foreign Host headers (DNS-rebinding) and cross-origin browsers.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
     app.add_middleware(
