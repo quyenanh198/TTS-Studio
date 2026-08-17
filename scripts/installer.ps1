@@ -20,6 +20,11 @@ if (-not (Test-Path $wv2)) {
 }
 $sig = Get-AuthenticodeSignature $wv2
 if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notlike "CN=Microsoft Corporation*") { throw "WebView2 bootstrapper signature invalid: $($sig.Status)" }
-& $iscc (Join-Path $Root "installer\TTSStudio.iss")
+# Single source of truth for the version: pyproject.toml. Old installers are removed so only one exists.
+$ver = (Select-String -Path (Join-Path $Root "pyproject.toml") -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+if (-not $ver) { throw "version not found in pyproject.toml" }
+Get-ChildItem (Join-Path $Root "dist") -Filter "TTSStudio-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+Write-Host "==> Building installer v$ver" -ForegroundColor Cyan
+& $iscc "/DAppVersion=$ver" (Join-Path $Root "installer\TTSStudio.iss")
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 Get-ChildItem (Join-Path $Root "dist") -Filter "TTSStudio-Setup-*.exe" | ForEach-Object { Write-Host ("==> {0}  ({1:N1} MB)" -f $_.FullName, ($_.Length / 1MB)) -ForegroundColor Green }
