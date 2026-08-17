@@ -44,6 +44,8 @@ export default function TtsPage({ active = true }: { active?: boolean }) {
   const [makeSrt, setMakeSrt] = useState(true)
   const [makeZip, setMakeZip] = useState(false)
   const [makeM4b, setMakeM4b] = useState(false)
+  const [expressive, setExpressive] = useState(true)
+  const [expressiveLevel, setExpressiveLevel] = useState(0.7)
 
   const ttsJobs = useJobs(selectJobsByKind('tts'))
   const latest = ttsJobs[0]
@@ -124,6 +126,7 @@ export default function TtsPage({ active = true }: { active?: boolean }) {
       voice, rate, volume, keep_pitch: keepPitch, pitch, format, export_mode: mode,
       ...(mode === 'range' ? { range_start: Math.max(1, rangeStart || 1), range_end: Math.max(1, rangeEnd || 1), merge_every: mergeEvery || undefined } : {}),
       make_srt: makeSrt, make_zip: makeZip, make_m4b: makeM4b, clone_profile: isClone ? voice.slice(6) : null,
+      expressive, expressive_level: expressiveLevel,
     }
     try { await api.synthesize(body); toastOk('Đã thêm vào hàng đợi', `${chosen.length} chương · giọng ${voiceObj?.name ?? voice}`) } catch (e) { toastError(e, 'Không tạo được job') }
   }
@@ -223,6 +226,18 @@ export default function TtsPage({ active = true }: { active?: boolean }) {
         <div className="flex flex-col gap-4">
           <Card title="3. Giọng đọc" icon={<Mic2 size={14} />}>
             <VoicePicker value={voice} onChange={(id, v) => { setVoice(id); setVoiceObj(v) }} compact />
+            <div className="mt-4 rounded-[var(--radius-md)] border border-line bg-surface-2 p-3">
+              <label className="flex items-center gap-2 text-[13px] font-semibold">
+                <input type="checkbox" checked={expressive} onChange={(e) => setExpressive(e.target.checked)} /> Biểu cảm theo ngữ cảnh
+                <span className="tag tag-primary">Mới</span>
+              </label>
+              <p className="help mt-1">Tự thay đổi ngữ điệu theo câu hỏi, câu cảm thán, lời thoại, từ ngữ cảm xúc (vui/buồn/giận/sợ) và ngắt nghỉ tự nhiên cuối đoạn. Áp dụng cho giọng Edge Neural.</p>
+              {expressive && (
+                <div className="mt-2">
+                  <Slider label="Mức độ biểu cảm" value={expressiveLevel} min={0.2} max={1} step={0.1} format={(v) => (v < 0.45 ? 'Nhẹ' : v < 0.8 ? 'Vừa' : 'Mạnh')} onChange={setExpressiveLevel} />
+                </div>
+              )}
+            </div>
             {voiceObj?.provider === 'tiktok' && <div className="mt-3"><Alert kind="warning">Giọng TikTok cần <b>sessionid</b> trong Cài đặt. Văn bản dài được cắt ~280 ký tự/lần.</Alert></div>}
             {voice.startsWith('clone:') && <div className="mt-3"><Alert kind="info">Pipeline: Edge TTS đúng ngôn ngữ → chuyển đổi sang giọng clone (cần GPU để nhanh).</Alert></div>}
           </Card>

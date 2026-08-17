@@ -243,12 +243,41 @@ def _slim_wrapper_class():
     return SlimSeedVC
 
 
+def _verify_cache() -> list[str]:
+    """Hugging Face cache uses symlinks snapshots/ → blobs/. A copy made without symlink support (or an
+    interrupted download) leaves dangling links / pseudo-symlink files that fail with EINVAL/ENOENT at
+    open time. Remove any repo whose snapshot files can't actually be read; HF re-downloads on demand."""
+    import shutil
+
+    removed: list[str] = []
+    for repo in SEEDVC_MODELS_DIR.glob("models--*"):
+        snaps = repo / "snapshots"
+        if not snaps.is_dir():
+            continue
+        broken = False
+        for f in snaps.rglob("*"):
+            if f.is_dir() and not f.is_symlink():
+                continue
+            try:
+                with open(f, "rb") as fh:
+                    fh.read(1)
+            except OSError:
+                broken = True
+                break
+        if broken:
+            log.warning("seed-vc cache repo %s is corrupt — removing for re-download", repo.name)
+            shutil.rmtree(repo, ignore_errors=True)
+            removed.append(repo.name)
+    return removed
+
+
 def _get_wrapper(device: str):
     global _wrapper, _wrapper_device
     with _lock:
         if _wrapper is None or _wrapper_device != device:
             import torch  # type: ignore
 
+            _verify_cache()
             _patch_seedvc_compat()
             cls = _slim_wrapper_class()
             log.info("loading Seed-VC (slim) on %s", device)
