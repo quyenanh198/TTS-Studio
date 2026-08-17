@@ -35,6 +35,8 @@ Type: filesandordirs; Name: "{app}\backend"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Microsoft Edge WebView2 Evergreen bootstrapper (Microsoft-signed, ~1.7 MB). Runs only if the runtime is missing.
+Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "wscript.exe"; Parameters: """{app}\TTS Studio (no console).vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\app.ico"
@@ -45,4 +47,23 @@ Name: "{autodesktop}\{#AppName}"; Filename: "wscript.exe"; Parameters: """{app}\
 Name: "desktopicon"; Description: "Tạo lối tắt trên Desktop"; GroupDescription: "Lối tắt:"
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Đang cài Microsoft Edge WebView2 Runtime (cần internet)…"; Check: not WebView2Installed; Flags: waituntilterminated
 Filename: "wscript.exe"; Parameters: """{app}\TTS Studio (no console).vbs"""; Description: "Mở {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+const
+  WV2Client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function KeyHasVersion(Root: Integer; const Sub: String): Boolean;
+var
+  Ver: String;
+begin
+  Result := RegQueryStringValue(Root, Sub, 'pv', Ver) and (Ver <> '') and (Ver <> '0.0.0.0');
+end;
+
+function WebView2Installed(): Boolean;
+begin
+  Result := KeyHasVersion(HKLM, 'SOFTWARE\WOW6432Node' + WV2Client)
+         or KeyHasVersion(HKLM, 'SOFTWARE' + WV2Client)
+         or KeyHasVersion(HKCU, 'Software' + WV2Client);
+end;
