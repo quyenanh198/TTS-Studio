@@ -12,7 +12,7 @@ from typing import Any
 
 from ..config import settings
 from ..jobs import JobContext
-from . import audio, ffmpeg, prosody, providers, srt as srtlib, text as textlib, voices
+from . import audio, f5, ffmpeg, prosody, providers, srt as srtlib, text as textlib, voices
 from .srt import Cue, Word
 
 log = logging.getLogger(__name__)
@@ -152,6 +152,9 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
     ch_dir = work / f"ch{idx:04d}"
     ch_dir.mkdir(parents=True, exist_ok=True)
 
+    if clone_profile and clone_profile.get("engine") == "f5vi":
+        return _synth_chapter_f5(ctx, req, ch, ch_dir, idx, prog, clone_profile)
+
     # ---- SRT-timed chapter (per_cue): synth each cue, fit to its slot ---------------
     if ch.cues and req.export_mode == "per_cue":
         parts: list[Path] = []
@@ -228,6 +231,67 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
         if abs(req.rate - 1.0) > 1e-3:
             cues = srtlib.scale(cues, 1.0 / req.rate)
         wav = eff
+    return ChapterOut(title=ch.title, wav=wav, cues=srtlib.renumber(cues), duration=audio.duration(wav), index=idx)
+
+
+def _synth_chapter_f5(ctx: JobContext, req: TtsRequest, ch: ChapterIn, ch_dir: Path, idx: int,
+                      prog: Progress, profile: dict[str, Any]) -> ChapterOut:
+    """Offline Vietnamese zero-shot TTS (F5-TTS). Each sentence group is voiced with the emotion
+    sample that best matches its prosody tags. Rate is native (F5 `speed`); volume / pitch are applied
+    afterwards with ffmpeg."""
+    pid = profile["id"]
+    f5.ensure_from_ref(profile)
+    parts: list[Path] = []
+    cues: list[Cue] = []
+
+    if ch.cues and req.export_mode == "per_cue":
+        t = 0.0
+        for i, cue in enumerate(ch.cues):
+            ctx.check_cancelled()
+            sample = f5.pick_sample(pid, prosody.classify(cue.text).tags)
+            raw = ch_dir / f"cue{i:05d}.wav"
+            f5.synth(cue.text, Path(sample["wav"]), sample["text"], raw, speed=req.rate)
+            fitted = ch_dir / f"cuef{i:05d}.wav"
+            audio.fit_to_duration(raw, fitted, max(0.2, cue.end - cue.start))
+            gap = cue.start - t
+            if gap > 0.02:
+                sil = ch_dir / f"sil{i:05d}.wav"
+                audio.make_silence(sil, gap)
+                parts.append(sil)
+            parts.append(fitted)
+            t = cue.end
+            prog.tick(max(1, len(cue.text)), f"[{ch.title}] cue {i + 1}/{len(ch.cues)}")
+        wav = ch_dir / "chapter.wav"
+        audio.concat(parts, wav)
+        return ChapterOut(title=ch.title, wav=wav, cues=list(ch.cues), duration=audio.duration(wav), index=idx)
+
+    normalized = textlib.normalize(ch.text)
+    level = req.expressive_level if req.expressive else 0.0
+    segs = prosody.group(prosody.plan(textlib.split_paragraphs(normalized), level), f5.MAX_GEN_CHARS)
+    if not segs:
+        raise RuntimeError(f"Chương '{ch.title}' không có nội dung")
+    offset = 0.0
+    for i, seg in enumerate(segs):
+        ctx.check_cancelled()
+        sample = f5.pick_sample(pid, seg.tags if req.expressive else None)
+        raw = ch_dir / f"f{i:05d}.wav"
+        f5.synth(seg.text, Path(sample["wav"]), sample["text"], raw, speed=req.rate)
+        dur = ffmpeg.probe_duration(raw)
+        cues.append(Cue(start=offset, end=offset + dur, text=seg.text))
+        parts.append(raw)
+        offset += dur
+        if req.expressive and seg.pause_after > 0.05:
+            sil = ch_dir / f"fp{i:05d}.wav"
+            audio.make_silence(sil, seg.pause_after)
+            parts.append(sil)
+            offset += seg.pause_after
+        prog.tick(len(seg.text), f"[{ch.title}] {i + 1}/{len(segs)}")
+    wav_raw = ch_dir / "chapter_raw.wav"
+    audio.concat(parts, wav_raw)
+    wav = wav_raw
+    if abs(req.volume - 1.0) > 1e-3 or (req.keep_pitch and abs(req.pitch) > 1e-3):
+        wav = ch_dir / "chapter_fx.wav"
+        audio.apply_effects(wav_raw, wav, rate=1.0, volume=req.volume, keep_pitch=True, pitch_semitones=req.pitch)
     return ChapterOut(title=ch.title, wav=wav, cues=srtlib.renumber(cues), duration=audio.duration(wav), index=idx)
 
 

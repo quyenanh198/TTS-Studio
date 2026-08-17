@@ -45,6 +45,13 @@ FRONTEND_DIST = PROGRAM_DIR / "frontend" / "dist"
 for _d in (DATA_DIR, OUTPUT_DIR, MODELS_DIR, CACHE_DIR, BIN_DIR, PROFILES_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
+# Hugging Face cache (Seed-VC, Vocos, Whisper…): on Windows the symlink-based layout is fragile —
+# links created by unprivileged Python may be unreadable through absolute paths ([Errno 2]/[Errno 22]
+# on config.yml). Store plain copies instead. Must be set before huggingface_hub is imported.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "output_dir": str(OUTPUT_DIR),

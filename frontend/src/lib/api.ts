@@ -49,6 +49,7 @@ export interface Voice {
   lang: string
   gender: 'female' | 'male' | 'unknown'
   hot?: boolean
+  engine?: string // clone voices: 'seedvc' | 'f5vi'
 }
 
 export interface Chapter {
@@ -80,10 +81,27 @@ export interface VoiceProfile {
   gender: 'female' | 'male'
   language: string
   ref_path: string
-  engine: string
+  engine: 'seedvc' | 'f5vi' | string
   base_voice: string | null
   notes: string
   created_at: string
+  samples?: EmotionSample[]
+}
+
+export interface EmotionSample {
+  emotion: string
+  wav: string
+  text: string
+  duration: number
+}
+
+export interface F5Status {
+  installed: boolean
+  models_ready: boolean
+  device: string
+  license: string
+  message: string
+  torch: { installed: boolean; version: string | null; cuda: boolean; device_name: string | null }
 }
 
 const BASE = ''
@@ -169,8 +187,14 @@ export const api = {
   deleteProfile: (id: string) => req<{ ok: boolean }>(`/api/clone/profiles/${id}`, { method: 'DELETE' }),
   cloneStatus: () => req<CloneStatus>('/api/clone/status'),
   installClone: () => req<Job>('/api/clone/install', { method: 'POST' }),
-  previewProfile: (id: string, lang: string) =>
-    req<Job>(`/api/clone/profiles/${id}/preview`, json({ lang })),
+  previewProfile: (id: string, lang: string, emotion?: string) =>
+    req<Job>(`/api/clone/profiles/${id}/preview`, json({ lang, emotion })),
+  f5Status: () => req<F5Status>('/api/clone/f5/status'),
+  installF5: () => req<Job>('/api/clone/f5/install', { method: 'POST' }),
+  emotions: () => req<{ id: string; label: string }[]>('/api/clone/emotions'),
+  addSample: (id: string, fd: FormData) => req<EmotionSample>(`/api/clone/profiles/${id}/samples`, { method: 'POST', body: fd }),
+  deleteSample: (id: string, emotion: string) =>
+    req<{ ok: boolean }>(`/api/clone/profiles/${id}/samples/${emotion}`, { method: 'DELETE' }),
 }
 
 export interface SynthesizeRequest {

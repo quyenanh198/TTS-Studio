@@ -37,7 +37,8 @@ def main() -> int:
     do_ffmpeg = "--ffmpeg" in args
     do_clone = "--clone" in args
     do_whisper = "--whisper-gpu" in args
-    if not (do_ffmpeg or do_clone or do_whisper):
+    do_f5 = "--f5" in args
+    if not (do_ffmpeg or do_clone or do_whisper or do_f5):
         return 0
 
     say("=" * 70)
@@ -77,6 +78,17 @@ def main() -> int:
             say("  OK — " + st["message"])
         except Exception:  # noqa: BLE001
             failures.append("PyTorch/Seed-VC")
+            say(traceback.format_exc()[-1500:])
+
+    if do_f5:
+        say("\n[2b] F5-TTS Việt — giọng Việt có cảm xúc, offline (f5-tts + model ~1.5 GB; kèm PyTorch nếu chưa có)")
+        try:
+            from app.services import f5
+
+            f5.install(progress=progress)
+            say("  OK — " + f5.status()["message"])
+        except Exception:  # noqa: BLE001
+            failures.append("F5-TTS Việt")
             say(traceback.format_exc()[-1500:])
 
     if do_whisper:

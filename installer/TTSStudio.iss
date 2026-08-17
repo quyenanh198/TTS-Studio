@@ -39,6 +39,7 @@ Name: "custom"; Description: "Tuỳ chọn"; Flags: iscustom
 Name: "core"; Description: "Ứng dụng TTS Studio (bắt buộc)"; Types: recommended minimal custom; Flags: fixed
 Name: "ffmpeg"; Description: "FFmpeg — bắt buộc cho mọi tính năng audio (~90 MB, tải khi cài)"; Types: recommended custom
 Name: "clone"; Description: "Clone giọng — PyTorch + Seed-VC (2–3 GB, tự chọn bản CUDA/CPU theo GPU)"; Types: custom
+Name: "f5vi"; Description: "F5-TTS Việt — giọng Việt có cảm xúc, offline (model ~1.5 GB; kèm PyTorch nếu chưa có)"; Types: custom
 Name: "whispergpu"; Description: "Tăng tốc GPU cho Whisper — cuBLAS/cuDNN (~1 GB, chỉ máy NVIDIA)"; Types: custom
 
 [UninstallDelete]
@@ -96,6 +97,7 @@ begin
   Result := '';
   if WizardIsComponentSelected('ffmpeg') then Result := Result + ' --ffmpeg';
   if WizardIsComponentSelected('clone') then Result := Result + ' --clone';
+  if WizardIsComponentSelected('f5vi') then Result := Result + ' --f5';
   if WizardIsComponentSelected('whispergpu') then Result := Result + ' --whisper-gpu';
   Result := Trim(Result);
 end;

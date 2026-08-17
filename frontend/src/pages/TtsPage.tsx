@@ -239,7 +239,10 @@ export default function TtsPage({ active = true }: { active?: boolean }) {
               )}
             </div>
             {voiceObj?.provider === 'tiktok' && <div className="mt-3"><Alert kind="warning">Giọng TikTok cần <b>sessionid</b> trong Cài đặt. Văn bản dài được cắt ~280 ký tự/lần.</Alert></div>}
-            {voice.startsWith('clone:') && <div className="mt-3"><Alert kind="info">Pipeline: Edge TTS đúng ngôn ngữ → chuyển đổi sang giọng clone (cần GPU để nhanh).</Alert></div>}
+            {voice.startsWith('clone:') && voiceObj?.engine !== 'f5vi' && <div className="mt-3"><Alert kind="info">Pipeline: Edge TTS đúng ngôn ngữ → chuyển đổi sang giọng clone (cần GPU để nhanh).</Alert></div>}
+            {voice.startsWith('clone:') && voiceObj?.engine === 'f5vi' && (
+              <div className="mt-3"><Alert kind="info">F5-TTS Việt (offline): chỉ tiếng Việt, đọc thẳng bằng giọng clone; cảm xúc từng câu chọn theo <b>bộ mẫu cảm xúc</b> của profile khi bật Biểu cảm. Chậm hơn Edge (~4× thời lượng audio trên GPU 4 GB, CPU rất chậm).</Alert></div>
+            )}
           </Card>
 
           <Card title="4. Điều chỉnh" icon={<Settings2 size={14} />}>
