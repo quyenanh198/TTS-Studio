@@ -25,6 +25,31 @@ def test_drain_passthrough():
     assert clone._drain([1, 2, 3]) == [1, 2, 3]
 
 
+def test_verify_cache_discards_unreadable_repo(tmp_path, monkeypatch):
+    """A snapshot file that cannot be opened (dangling symlink / WinError 448 / EINVAL) must get the
+    whole repo moved aside so Hugging Face re-downloads it; healthy repos stay."""
+    monkeypatch.setattr(clone, "SEEDVC_MODELS_DIR", tmp_path)
+    good = tmp_path / "models--good" / "snapshots" / "abc"
+    good.mkdir(parents=True)
+    (good / "config.yml").write_text("ok")
+    bad = tmp_path / "models--Plachta--Seed-VC" / "snapshots" / "def"
+    bad.mkdir(parents=True)
+    (bad / "config.yml").write_text("x")
+    real_open = open
+
+    def flaky_open(f, *a, **k):
+        if str(f).endswith("def" + "\\config.yml") or str(f).endswith("def/config.yml"):
+            raise OSError(22, "Invalid argument")
+        return real_open(f, *a, **k)
+
+    with mock.patch("builtins.open", flaky_open):
+        removed = clone._verify_cache()
+    assert removed == ["models--Plachta--Seed-VC"]
+    assert not (tmp_path / "models--Plachta--Seed-VC").exists()
+    assert (good / "config.yml").exists()
+    assert not list(tmp_path.glob("*.broken-*"))  # fully deleted when the FS allows it
+
+
 def test_torch_index_by_driver():
     with mock.patch.object(clone, "nvidia_driver_cuda", return_value=None):
         assert clone._torch_index().endswith("/cpu")
