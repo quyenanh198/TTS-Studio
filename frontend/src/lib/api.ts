@@ -191,6 +191,8 @@ export interface SynthesizeRequest {
   make_m4b: boolean
   clone_profile?: string | null
   output_dir?: string | null
+  expressive?: boolean
+  expressive_level?: number
 }
 
 export interface TranscribeRequest {

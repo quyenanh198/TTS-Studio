@@ -79,3 +79,18 @@ def test_effects_filter():
     f = audio.effects_filter(rate=1.2, keep_pitch=False, volume=0.8)
     assert f.startswith("asetrate=24000*1.2000,aresample=24000") and f.endswith("volume=0.800")
     assert "asetrate" in audio.effects_filter(pitch_semitones=2)
+
+
+def test_prosody_plan_and_group():
+    from app.services import prosody
+
+    paras = text.split_paragraphs(text.normalize("Anh có đến không? Tôi buồn quá...\n\n\"Đi thôi!\" Cô ấy cười vui vẻ."))
+    segs = prosody.plan(paras, level=1.0)
+    assert segs[0].tags == ["question"]
+    assert "sad" in segs[1].tags and segs[1].pause_after > 0 and segs[1].rate < 0
+    assert "exclaim" in segs[2].tags and "dialogue" in segs[2].tags
+    assert "joy" in segs[3].tags and "para" in segs[3].tags
+    grouped = prosody.group(segs, 2500)
+    assert 1 < len(grouped) <= len(segs)
+    flat = prosody.plan(paras, level=0.0)
+    assert all(s.rate == 0 and s.pitch == 0 for s in flat)

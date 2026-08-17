@@ -12,7 +12,7 @@ from typing import Any
 
 from ..config import settings
 from ..jobs import JobContext
-from . import audio, ffmpeg, providers, srt as srtlib, text as textlib, voices
+from . import audio, ffmpeg, prosody, providers, srt as srtlib, text as textlib, voices
 from .srt import Cue, Word
 
 log = logging.getLogger(__name__)
@@ -45,6 +45,8 @@ class TtsRequest:
     clone_profile: str | None = None
     output_dir: str | None = None
     gap_ms: int = 700  # silence between chapters when merging
+    expressive: bool = False       # context-aware prosody (questions, dialogue, emotion words, pauses)
+    expressive_level: float = 0.7  # 0..1 strength of the prosody offsets
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "TtsRequest":
@@ -99,16 +101,22 @@ def _provider_for(voice: str) -> str:
 
 
 def _synth_chunk(provider: str, text: str, voice: str, out: Path, req: TtsRequest,
-                 neutral: bool = False) -> providers.SynthResult:
+                 neutral: bool = False, seg: "prosody.Segment | None" = None) -> providers.SynthResult:
     """`neutral=True` synthesises at 1.0x / 0dB / 0st — used when effects are applied later by
-    ffmpeg (clone pipeline) so they are never applied twice."""
+    ffmpeg (clone pipeline) so they are never applied twice. `seg` adds expressive prosody offsets."""
     if provider == "tiktok":
         return providers.synth_tiktok(text, voice, out, settings.get("tiktok_session_id", ""))
-    if neutral:
+    if neutral and seg is None:
         return providers.synth_edge(text, voice, out)
+    base_rate = 1.0 if neutral else req.rate
+    base_vol = 1.0 if neutral else req.volume
+    base_pitch = 0.0 if neutral else (req.pitch if req.keep_pitch else 0.0)
+    if seg is not None:
+        base_rate = max(0.5, min(2.0, base_rate * (1.0 + seg.rate)))
+        base_vol = max(0.2, min(2.0, base_vol * (1.0 + seg.volume)))
+        base_pitch = base_pitch + seg.pitch
     # edge: native rate/volume/pitch (better quality than post-processing)
-    return providers.synth_edge(text, voice, out, rate=req.rate, volume=req.volume,
-                                pitch_semitones=req.pitch if req.keep_pitch else 0.0)
+    return providers.synth_edge(text, voice, out, rate=base_rate, volume=base_vol, pitch_semitones=base_pitch)
 
 
 def _base_voice_for_clone(req: TtsRequest, profile: dict[str, Any], lang_hint: str | None) -> str:
@@ -170,19 +178,25 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
 
     # ---- plain text chapter ------------------------------------------------------------
     max_chars = textlib.TIKTOK_MAX_CHARS if provider == "tiktok" else textlib.MAX_CHUNK_CHARS
-    sentences = textlib.split_sentences(textlib.normalize(ch.text))
-    chunks = textlib.chunk_sentences(sentences, max_chars)
-    if not chunks:
+    normalized = textlib.normalize(ch.text)
+    expressive = req.expressive and provider == "edge"
+    if expressive:
+        segs = prosody.group(prosody.plan(textlib.split_paragraphs(normalized), req.expressive_level), max_chars)
+    else:
+        segs = [prosody.Segment(c) for c in textlib.chunk_sentences(textlib.split_sentences(normalized), max_chars)]
+    if not segs:
         raise RuntimeError(f"Chương '{ch.title}' không có nội dung")
 
     parts = []
     all_words: list[Word] = []
     chunk_cues: list[Cue] = []
     offset = 0.0
-    for i, chunk in enumerate(chunks):
+    for i, seg in enumerate(segs):
         ctx.check_cancelled()
+        chunk = seg.text
         raw = ch_dir / f"c{i:05d}.mp3"
-        res = _synth_chunk(provider, chunk, voice, raw, req, neutral=clone_profile is not None)
+        res = _synth_chunk(provider, chunk, voice, raw, req, neutral=clone_profile is not None,
+                           seg=seg if expressive else None)
         dur = ffmpeg.probe_duration(raw) or res.duration
         if res.words:
             aligned = srtlib.attach_punctuation(chunk, res.words)
@@ -191,7 +205,12 @@ def synth_chapter(ctx: JobContext, req: TtsRequest, ch: ChapterIn, work: Path, i
             chunk_cues.append(Cue(start=offset, end=offset + dur, text=chunk))
         parts.append(raw)
         offset += dur
-        prog.tick(len(chunk), f"[{ch.title}] {i + 1}/{len(chunks)}")
+        if expressive and seg.pause_after > 0.05:  # natural pause (paragraph end, trailing thought…)
+            sil = ch_dir / f"p{i:05d}.wav"
+            audio.make_silence(sil, seg.pause_after)
+            parts.append(sil)
+            offset += seg.pause_after
+        prog.tick(len(chunk), f"[{ch.title}] {i + 1}/{len(segs)}")
 
     wav_raw = ch_dir / "chapter_raw.wav"
     audio.concat(parts, wav_raw)

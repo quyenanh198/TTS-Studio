@@ -45,6 +45,19 @@ def split_sentences(text: str) -> list[str]:
     return out
 
 
+def split_paragraphs(text: str) -> list[list[str]]:
+    """Like split_sentences but keeps paragraph grouping: [[s1, s2], [s3], ...]."""
+    out: list[list[str]] = []
+    for para in re.split(r"\n\s*\n", text):
+        para = para.strip()
+        if not para:
+            continue
+        sents = split_sentences(para)
+        if sents:
+            out.append(sents)
+    return out
+
+
 def chunk_sentences(sentences: list[str], max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     """Greedy pack sentences into chunks ≤ max_chars. Over-long sentences are hard-split."""
     chunks: list[str] = []
