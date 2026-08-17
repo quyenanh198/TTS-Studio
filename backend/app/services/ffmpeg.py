@@ -19,20 +19,22 @@ from typing import Callable, Sequence
 
 import httpx
 
-from ..config import BIN_DIR
+from ..config import BIN_DIR, PROGRAM_DIR
 
 log = logging.getLogger(__name__)
 
-FFMPEG_DIR = BIN_DIR / "ffmpeg"
+FFMPEG_DIR = BIN_DIR / "ffmpeg"                 # downloaded on demand (per user)
+BUNDLED_FFMPEG_DIR = PROGRAM_DIR / "bin" / "ffmpeg"  # shipped by the Full installer
 FFMPEG_ZIP_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
 _EXE = ".exe" if sys.platform == "win32" else ""
 
 
 def _find(name: str) -> str | None:
-    local = FFMPEG_DIR / f"{name}{_EXE}"
-    if local.exists():
-        return str(local)
+    for d in (BUNDLED_FFMPEG_DIR, FFMPEG_DIR):
+        local = d / f"{name}{_EXE}"
+        if local.exists():
+            return str(local)
     found = shutil.which(name)
     if found:
         return found

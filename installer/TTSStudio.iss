@@ -30,6 +30,17 @@ AppSupportURL=https://github.com/quyenanh198/TTS-Studio/issues
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
+[Types]
+Name: "recommended"; Description: "Đề xuất (tự phát hiện GPU)"
+Name: "minimal"; Description: "Tối thiểu (chỉ ứng dụng — tải thêm sau trong app)"
+Name: "custom"; Description: "Tuỳ chọn"; Flags: iscustom
+
+[Components]
+Name: "core"; Description: "Ứng dụng TTS Studio (bắt buộc)"; Types: recommended minimal custom; Flags: fixed
+Name: "ffmpeg"; Description: "FFmpeg — bắt buộc cho mọi tính năng audio (~90 MB, tải khi cài)"; Types: recommended custom
+Name: "clone"; Description: "Clone giọng — PyTorch + Seed-VC (2–3 GB, tự chọn bản CUDA/CPU theo GPU)"; Types: custom
+Name: "whispergpu"; Description: "Tăng tốc GPU cho Whisper — cuBLAS/cuDNN (~1 GB, chỉ máy NVIDIA)"; Types: custom
+
 [UninstallDelete]
 ; runtime bits the app itself writes inside the install dir (pip installs into the embedded python)
 Type: filesandordirs; Name: "{app}\python"
@@ -50,6 +61,8 @@ Name: "desktopicon"; Description: "Tạo lối tắt trên Desktop"; GroupDescri
 
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Đang cài Microsoft Edge WebView2 Runtime (cần internet)…"; Check: not WebView2Installed; Flags: waituntilterminated
+; Optional components are downloaded/installed by the app's own installers (visible console for progress)
+Filename: "{app}\python\python.exe"; Parameters: """{app}\postinstall.py"" {code:ComponentArgs}"; WorkingDir: "{app}"; StatusMsg: "Đang tải thành phần tuỳ chọn (FFmpeg / PyTorch)…"; Check: HasOptionalComponents; Flags: waituntilterminated
 Filename: "wscript.exe"; Parameters: """{app}\TTS Studio (no console).vbs"""; Description: "Mở {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
@@ -65,7 +78,52 @@ end;
 
 function WebView2Installed(): Boolean;
 begin
-  Result := KeyHasVersion(HKLM, 'SOFTWARE\WOW6432Node' + WV2Client)
-         or KeyHasVersion(HKLM, 'SOFTWARE' + WV2Client)
-         or KeyHasVersion(HKCU, 'Software' + WV2Client);
+  Result := KeyHasVersion(HKLM, 'SOFTWARE\WOW6432Node\' + WV2Client)
+         or KeyHasVersion(HKLM, 'SOFTWARE\' + WV2Client)
+         or KeyHasVersion(HKCU, 'Software\' + WV2Client);
+end;
+
+{ NVIDIA GPU present? (driver ships nvidia-smi.exe into System32 and registers itself) }
+function HasNvidiaGpu(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{sys}\nvidia-smi.exe'))
+         or RegKeyExists(HKLM, 'SOFTWARE\NVIDIA Corporation\Global\NVSMI')
+         or RegKeyExists(HKLM, 'SOFTWARE\NVIDIA Corporation\Installer2\Drivers');
+end;
+
+function ComponentArgs(Param: String): String;
+begin
+  Result := '';
+  if WizardIsComponentSelected('ffmpeg') then Result := Result + ' --ffmpeg';
+  if WizardIsComponentSelected('clone') then Result := Result + ' --clone';
+  if WizardIsComponentSelected('whispergpu') then Result := Result + ' --whisper-gpu';
+  Result := Trim(Result);
+end;
+
+function HasOptionalComponents(): Boolean;
+begin
+  Result := ComponentArgs('') <> '';
+end;
+
+{ Default selection: GPU machines get the clone engine + Whisper GPU libs pre-ticked. }
+procedure InitializeWizard();
+begin
+  { Respect explicit /COMPONENTS= and silent installs; otherwise pre-select by hardware. }
+  if WizardSilent() or (ExpandConstant('{param:COMPONENTS|}') <> '') then
+    exit;
+  if HasNvidiaGpu() then
+    WizardSelectComponents('core,ffmpeg,clone,whispergpu')
+  else
+    WizardSelectComponents('core,ffmpeg');
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpSelectComponents then
+  begin
+    if HasNvidiaGpu() then
+      WizardForm.ComponentsList.Hint := 'Phát hiện GPU NVIDIA — nên cài Clone giọng và tăng tốc Whisper.'
+    else
+      WizardForm.ComponentsList.Hint := 'Không phát hiện GPU NVIDIA — Clone giọng sẽ chạy CPU (rất chậm).';
+  end;
 end;

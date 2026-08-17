@@ -55,7 +55,6 @@ if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 if ($WithASRGpu) {
   & $Py -m pip install --no-cache-dir nvidia-cublas-cu12 nvidia-cudnn-cu12
 }
-
 Write-Host "==> Copy app files" -ForegroundColor Cyan
 Copy-Item -Recurse -Force (Join-Path $Root "backend") (Join-Path $Dist "backend")
 Get-ChildItem (Join-Path $Dist "backend") -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
@@ -63,6 +62,7 @@ Remove-Item -Recurse -Force (Join-Path $Dist "backend\tests") -ErrorAction Silen
 New-Item -ItemType Directory -Force (Join-Path $Dist "frontend") | Out-Null
 Copy-Item -Recurse -Force (Join-Path $Root "frontend\dist") (Join-Path $Dist "frontend\dist")
 Copy-Item -Force (Join-Path $Root "launcher.py") $Dist
+Copy-Item -Force (Join-Path $Root "scripts\postinstall.py") $Dist
 Copy-Item -Force (Join-Path $Root "scripts\run.bat") (Join-Path $Dist "TTS Studio.bat")
 Copy-Item -Force (Join-Path $Root "scripts\run-silent.vbs") (Join-Path $Dist "TTS Studio (no console).vbs")
 Copy-Item -Force (Join-Path $Root "README.md") $Dist
