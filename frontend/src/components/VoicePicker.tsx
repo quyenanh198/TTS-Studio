@@ -48,7 +48,7 @@ export default function VoicePicker({ value, onChange, compact = false }: { valu
   }, [load])
 
   const all: Voice[] = useMemo(() => {
-    const cloneVoices: Voice[] = profiles.map((p) => ({ id: `clone:${p.id}`, name: p.name, provider: 'clone', locale: p.language, lang: p.language, gender: p.gender, hot: false }))
+    const cloneVoices: Voice[] = profiles.map((p) => ({ id: `clone:${p.id}`, name: p.name, provider: 'clone', locale: p.language, lang: p.language, gender: p.gender, hot: false, engine: p.engine }))
     return [...cloneVoices, ...(voices ?? [])]
   }, [voices, profiles])
 

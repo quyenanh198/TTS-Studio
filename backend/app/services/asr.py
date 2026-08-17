@@ -121,7 +121,9 @@ def cuda_available() -> bool:
 def resolve_device(pref: str) -> tuple[str, str]:
     """Return (device, compute_type)."""
     pref = (pref or "auto").lower()
-    if pref in ("auto", "cuda") and cuda_available():
+    # ctranslate2 may *see* the GPU while the CUDA 12 runtime (cublas64_12/cudnn) is absent — e.g. a
+    # PC whose PyTorch is the cu118 build. Using cuda then fails at encode time, so require both.
+    if pref in ("auto", "cuda") and cuda_available() and gpu_support_installed():
         return "cuda", "float16"
     return "cpu", "int8"
 
