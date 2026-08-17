@@ -75,6 +75,15 @@ export default function SettingsPage() {
             </dd>
             <dt className="text-fg-muted">Module</dt>
             <dd className="flex flex-wrap gap-1.5">{Object.entries(sys.modules).map(([k, v]) => <span key={k} className={`tag ${v ? 'tag-success' : 'tag-muted'}`}>{k}</span>)}</dd>
+            <dt className="text-fg-muted">Nhật ký lỗi</dt>
+            <dd className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <code className="truncate text-xs" title={sys.session_log ?? ''}>{sys.session_log ? sys.session_log.split(/[\\/]/).pop() : 'không khả dụng'}</code>
+                {sys.session_log && <button className="btn-ghost btn-sm" onClick={() => safeCall(api.openPath(sys.session_log!), 'Không mở được file log')}><FolderOpen size={13} /> Hiện file phiên này</button>}
+                {sys.logs_dir && <button className="btn-ghost btn-sm" onClick={() => safeCall(api.openPath(sys.logs_dir!), 'Không mở được thư mục')}><FolderOpen size={13} /> Thư mục logs</button>}
+              </div>
+              <span className="text-xs text-fg-muted">Mỗi lần mở app tạo một file <code>logs/errors/session-…log</code> ghi mọi lỗi của phiên (backend, job, giao diện). Gửi file này khi báo lỗi.</span>
+            </dd>
           </dl>
         ) : <div className="flex flex-col gap-2"><Skeleton className="h-4 w-72" /><Skeleton className="h-4 w-56" /><Skeleton className="h-4 w-64" /></div>}
       </Card>

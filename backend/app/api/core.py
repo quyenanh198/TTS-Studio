@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from .. import errlog
 from ..config import DATA_DIR, settings
 from ..jobs import JobContext, jobs
 from ..services import ffmpeg, procs
@@ -78,7 +79,23 @@ def system_info() -> dict[str, Any]:
             "torch": _module_available("torch"),
             "seed_vc": _module_available("seed_vc"),
         },
+        "logs_dir": str(DATA_DIR / "logs"),
+        "session_log": str(errlog.session_log_path()) if errlog.session_log_path() else None,
     }
+
+
+class ClientError(BaseModel):
+    message: str
+    stack: str = ""
+    source: str = ""
+    url: str = ""
+
+
+@router.post("/system/client-error")
+def client_error(body: ClientError) -> dict[str, bool]:
+    """UI-side errors (toasts, window.onerror, unhandled promise rejections) → session error log."""
+    errlog.log_client_error(body.message[:4000], body.stack[:8000], body.source[:100], body.url[:500])
+    return {"ok": True}
 
 
 @router.post("/system/ffmpeg/install")

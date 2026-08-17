@@ -1,6 +1,6 @@
 [project]
 name = "tts-studio"
-version = "1.2.1"
+version = "1.2.2"
 description = "Desktop TTS / transcript / voice-clone studio (Vietnamese-first)"
 requires-python = ">=3.12,<3.13"
 dependencies = [

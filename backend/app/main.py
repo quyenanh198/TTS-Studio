@@ -6,15 +6,20 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from . import errlog
 from .config import FRONTEND_DIST
 from .jobs import jobs
 
+APP_VERSION = "1.2.2"
 log = logging.getLogger("tts_studio")
 
 
@@ -30,8 +35,30 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def _install_error_logging(app: FastAPI) -> None:
+    """Every failed request lands in the session error log (with traceback for unhandled ones)."""
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exc(request: Request, exc: StarletteHTTPException):
+        if exc.status_code >= 400 and exc.status_code != 404:
+            errlog.log_http_error(request.method, request.url.path, exc.status_code, exc.detail)
+        return await http_exception_handler(request, exc)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_exc(request: Request, exc: RequestValidationError):
+        errlog.log_http_error(request.method, request.url.path, 422, exc.errors())
+        return await request_validation_exception_handler(request, exc)
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exc(request: Request, exc: Exception):
+        log.exception("unhandled error in %s %s", request.method, request.url.path)
+        return JSONResponse({"detail": f"Lỗi nội bộ: {exc}"}, status_code=500)
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="TTS Studio", version="1.2.1", lifespan=lifespan)
+    errlog.setup(APP_VERSION)
+    app = FastAPI(title="TTS Studio", version=APP_VERSION, lifespan=lifespan)
+    _install_error_logging(app)
     # Loopback-only API: reject foreign Host headers (DNS-rebinding) and cross-origin browsers.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
     app.add_middleware(
