@@ -1,6 +1,8 @@
 ; Inno Setup script — build the portable folder first: scripts\build.ps1
 #define AppName "TTS Studio"
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+#define AppVersion "0.0.0-dev"
+#endif
 #define AppPublisher "TTS Studio"
 #define SourceDir "..\dist\TTSStudio"
 
