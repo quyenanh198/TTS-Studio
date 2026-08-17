@@ -10,3 +10,4 @@ build/
 .pip-torch.log
 .jobid
 *.egg-info/
+installer/redist/
