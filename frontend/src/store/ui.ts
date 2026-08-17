@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../lib/api'
 
 export type Theme = 'dark' | 'light'
 export type ToastKind = 'info' | 'success' | 'warning' | 'danger'
@@ -52,6 +53,10 @@ export const useUi = create<UiState>((set, get) => ({
 }))
 
 /** Convenience for catch blocks: toastError(e) */
-export const toastError = (e: unknown, title = 'Có lỗi xảy ra') =>
-  useUi.getState().toast('danger', title, e instanceof Error ? e.message : String(e))
+export const toastError = (e: unknown, title = 'Có lỗi xảy ra') => {
+  const detail = e instanceof Error ? e.message : String(e)
+  useUi.getState().toast('danger', title, detail)
+  // every error the user sees is also written to the per-session error log (backend)
+  api.reportClientError({ message: `${title}: ${detail}`, stack: e instanceof Error ? e.stack ?? '' : '', source: 'toast', url: location.hash || location.pathname })
+}
 export const toastOk = (title: string, detail?: string) => useUi.getState().toast('success', title, detail)

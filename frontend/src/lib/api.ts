@@ -22,6 +22,8 @@ export interface SystemInfo {
   ffmpeg: string | null
   ffprobe: string | null
   gpu: { cuda: boolean; name: string | null; vram_mb: number | null; torch: string | null }
+  logs_dir?: string
+  session_log?: string | null
   modules: Record<string, boolean>
 }
 
@@ -141,6 +143,12 @@ export const api = {
   system: () => req<SystemInfo>('/api/system'),
   installFfmpeg: () => req<Job>('/api/system/ffmpeg/install', { method: 'POST' }),
   openPath: (path: string) => req<{ ok: boolean }>('/api/system/open', json({ path })),
+  /** Fire-and-forget: UI errors go to the backend's per-session error log. Never throws. */
+  reportClientError: (body: { message: string; stack?: string; source?: string; url?: string }) => {
+    try {
+      fetch(`${BASE}/api/system/client-error`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => undefined)
+    } catch { /* ignore */ }
+  },
   fileUrl: (path: string) => `/api/system/file?path=${encodeURIComponent(path)}`,
 
   settings: () => req<Settings>('/api/settings'),
